@@ -1,3 +1,8 @@
+// Pantalla de bandeja de tickets de soporte (actualmente comentada/desactivada).
+// Flujo esperado:
+// 1) Validar que el usuario sea interno.
+// 2) Cargar tickets, areas y perfiles relacionados.
+// 3) Permitir tomar ticket y cerrarlo desde la UI.
 /*import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';

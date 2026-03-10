@@ -1,5 +1,8 @@
-// Archivo: C:\Users\usuario\freight-tracking\supabase\functions\create-shipment\index.ts
-// Descripcion: Este archivo forma parte de la logica principal de la aplicacion.
+// Edge Function: create-shipment
+// Objetivo:
+// - Validar sesion del usuario solicitante.
+// - Crear una carga en shipments y su relacion profile_shipment.
+// - Registrar la primera novedad en shipment_updates.
 
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -9,7 +12,7 @@ export const config = { auth: true };
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-  "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -38,7 +41,8 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  try{
+  try {
+    // 1) Validar JWT en Authorization header.
     const authHeader =
       req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -50,9 +54,10 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
+    // 2) Resolver usuario autenticado.
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_ANON_KEY")!,
     );
 
     const {
@@ -61,15 +66,36 @@ serve(async (req) => {
     } = await supabaseAuth.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: "Token o sesion invalida",
-        details: authError?.message
-      }), { 
-        status: 401, 
-        headers: {...corsHeaders, "Content-Type": "application/json" } 
+        details: authError?.message,
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // 3) Cliente admin para validar permisos e insertar en tablas protegidas.
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Solo usuarios internos pueden crear cargas.
+    const { data: requesterProfile, error: requesterProfileError } = await supabase
+      .from("profiles")
+      .select("is_internal")
+      .eq("id", user.id)
+      .single();
+
+    if (requesterProfileError || !requesterProfile?.is_internal) {
+      return new Response("No autorizado: solo usuarios internos pueden crear cargas", {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    // 4) Validar payload obligatorio.
     const body: Shipment = await req.json();
     const { do_number, origin, destination, owner_email } = body;
 
@@ -80,13 +106,10 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
+    // 5) Por defecto, el dueno de la carga es quien crea el registro.
     let ownerId = user.id;
 
+    // Si se envia owner_email, reasignamos propiedad a ese perfil.
     if (owner_email) {
       const { data: ownerProfile, error: ownerError } = await supabase
         .from("profiles")
@@ -94,21 +117,22 @@ serve(async (req) => {
         .eq("email", owner_email)
         .maybeSingle();
 
-    if (ownerError || !ownerProfile) {
-      return new Response("No se encontro el correo del propietario", {
-        status: 400,
-        headers: corsHeaders,
-      });
+      if (ownerError || !ownerProfile) {
+        return new Response("No se encontro el correo del propietario", {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+
+      ownerId = ownerProfile.id;
     }
 
-    ownerId = ownerProfile.id;
-    }
-
+    // 6) Crear carga principal.
     const { data: shipmentData, error: shipmentError } = await supabase
       .from("shipments")
       .insert({
-        do_number: body.do_number ,
-        shipment_type: body.shipment_type?? null,
+        do_number: body.do_number,
+        shipment_type: body.shipment_type ?? null,
         origin: body.origin,
         destination: body.destination,
         etd: body.etd ?? null,
@@ -126,13 +150,33 @@ serve(async (req) => {
       })
       .select()
       .single();
-      if (shipmentError) {
-        return new Response(shipmentError.message, {
-          status: 400,
-          headers: corsHeaders,
-        });
-      }
-      const { data: shipmentUpdateData, error: shipmentUpdateError } = await supabase
+
+    if (shipmentError) {
+      return new Response(shipmentError.message, {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    // 7) Asegurar relacion usuario-carga para RLS y vistas del cliente.
+    const { error: relationError } = await supabase
+      .from("profile_shipment")
+      .upsert(
+        { profile_id: ownerId, shipment_id: shipmentData.id },
+        { onConflict: "profile_id,shipment_id" },
+      );
+
+    if (relationError) {
+      // Rollback simple para no dejar carga huerfana sin relacion.
+      await supabase.from("shipments").delete().eq("id", shipmentData.id);
+      return new Response(relationError.message, {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    // 8) Registrar primera novedad de tracking.
+    const { data: shipmentUpdateData, error: shipmentUpdateError } = await supabase
       .from("shipment_updates")
       .insert({
         shipment_id: shipmentData?.id,
@@ -142,23 +186,25 @@ serve(async (req) => {
       })
       .select()
       .single();
-      if (shipmentUpdateError) {
-        return new Response(shipmentUpdateError.message, {
-          status: 400,
-          headers: corsHeaders,
-        });
-      }
+
+    if (shipmentUpdateError) {
+      return new Response(shipmentUpdateError.message, {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
 
     return new Response(JSON.stringify({ ...shipmentData, ...shipmentUpdateData }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },
       status: 201,
     });
-  } catch(error) {
+  } catch (error) {
     return new Response(
       error instanceof Error ? error.message : "Ocurrio un error inesperado",
       {
         status: 500,
         headers: corsHeaders,
-    });
+      },
+    );
   }
 });

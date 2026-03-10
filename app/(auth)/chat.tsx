@@ -1,3 +1,9 @@
+// Pantalla de chat de soporte (actualmente comentada/desactivada).
+// Flujo principal:
+// 1) Obtiene usuario y su ultima conversacion.
+// 2) Lista historial de ai_messages.
+// 3) Envia mensaje a Edge Function `chat-assistant`.
+// 4) Refresca la conversacion con respuesta AI o derivacion a ticket.
 /*import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {

@@ -1,5 +1,8 @@
-// Archivo: C:\Users\usuario\freight-tracking\supabase\functions\invite-user\index.ts
-// Descripcion: Este archivo forma parte de la logica principal de la aplicacion.
+// Edge Function: invite-user
+// Objetivo:
+// - Validar que quien invita este autenticado y sea usuario interno.
+// - Invitar por email usando Supabase Admin API.
+// - Ajustar flags del perfil creado por trigger (is_internal).
 
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -17,9 +20,10 @@ serve(async (req) => {
   }
 
   try {
+    // 1) Validar encabezado de autorizacion.
     const authHeader =
       req.headers.get("authorization") ?? req.headers.get("Authorization");
-    
+
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Falta el encabezado de autorizacion" }), {
         status: 401,
@@ -29,9 +33,10 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
+    // 2) Cliente anon para resolver usuario actual desde JWT.
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_ANON_KEY")!,
     );
 
     const {
@@ -46,6 +51,7 @@ serve(async (req) => {
       });
     }
 
+    // 3) Datos de invitacion enviados por frontend.
     const { email, is_internal, nickname } = await req.json();
 
     if (!email) {
@@ -55,12 +61,13 @@ serve(async (req) => {
       });
     }
 
+    // 4) Cliente service role para acciones administrativas.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Verificar que el usuario actual es interno
+    // 5) Solo perfiles internos pueden invitar.
     const { data: profile, error: profileFetchError } = await supabase
       .from("profiles")
       .select("is_internal")
@@ -74,58 +81,52 @@ serve(async (req) => {
       });
     }
 
-    // Invitar usuario - el trigger creará el perfil automáticamente
+    // 6) Invitacion por email. El trigger de BD crea el perfil base.
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: {
-        nickname: nickname || null
-      }
+        nickname: nickname || null,
+      },
     });
-    
+
     if (error) {
-    console.error("Error al invitar:", error);
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: error.message,
-        code: error.code 
+        code: error.code,
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("User invited:", data.user.id);
+    // 7) Espera corta para evitar carrera antes de actualizar el perfil.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Esperar un poco para que el trigger cree el perfil
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Actualizar is_internal
+    // 8) Ajustar atributo interno/externo del perfil recien creado.
     const { error: updateError } = await supabase
       .from("profiles")
       .update({ is_internal: is_internal })
       .eq("id", data.user.id);
 
     if (updateError) {
+      // No bloqueamos respuesta: el usuario ya fue invitado correctamente.
       console.error("Error al actualizar perfil:", updateError);
-      // No retornar error, el usuario ya fue creado e invitado
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      user: { id: data.user.id, email: data.user.email }
+    return new Response(JSON.stringify({
+      success: true,
+      user: { id: data.user.id, email: data.user.email },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-    
   } catch (error) {
-    console.error("Error en Edge Function:", error);
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Error desconocido"
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Error desconocido",
       }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });
-

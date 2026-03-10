@@ -1,3 +1,12 @@
+/* Edge Function: chat-assistant
+   Nota: este archivo esta comentado en bloque (codigo desactivado temporalmente).
+   Flujo esperado cuando se habilita:
+   1) Validar sesion del usuario.
+   2) Guardar mensaje del usuario en ai_messages.
+   3) Llamar OpenAI para triage estructurado (JSON estricto).
+   4) Si hay confianza suficiente, responder automaticamente.
+   5) Si no, crear/usar ticket de soporte y derivar a agente humano.
+*/
 /*import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 

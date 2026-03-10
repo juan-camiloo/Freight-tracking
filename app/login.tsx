@@ -1,12 +1,13 @@
 // Archivo: app/login.tsx
 /*
-Pantalla de acceso por magic link. 
+Pantalla de acceso por magic link.
 Solo permite solicitar OTP para correos registrados por usuarios internos.
 */
 
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { Alert, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../components/LogoCorner';
 import { supabase } from '../lib/supabase';
 
@@ -22,61 +23,63 @@ const COLORS = {
 };
 
 export default function Login() {
-  // Correo digitado por el usuario.
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
-  // Estado visual del boton mientras se envia la solicitud.
   const [loading, setLoading] = useState(false);
 
-  // Solicita envio de magic link a Supabase.
+  function getRedirectTo() {
+    if (Platform.OS === 'web') {
+      return Linking.createURL('/auth/callback');
+    }
+    const nativeUrl = Linking.createURL('auth/callback', { scheme: 'freighttracking' });
+    return nativeUrl;
+  }
+
   const handleLogin = async () => {
     if (!email) {
-      Alert.alert('Error', 'Por favor ingresa tu email');
+      Alert.alert(t('common.error'), t('login.missingEmail'));
       return;
     }
 
     setLoading(true);
 
-    //Evita problemas de redireccion en desarrollo local o en Expo Go usando el origen actual como redirect.
-    const redirectTo = Linking.createURL('/auth/callback');
+    const redirectTo = getRedirectTo();
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false, // Impide crear usuarios nuevos desde login.
+        shouldCreateUser: false,
         emailRedirectTo: redirectTo,
       },
     });
-   
 
     setLoading(false);
 
-    console.log('Redirect URL:', redirectTo);
     if (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert(t('common.error'), error.message);
     } else {
-      Alert.alert('Exito', 'Revisa tu email para el enlace magico');
+      Alert.alert(t('common.success'), t('login.checkEmail'));
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Fondo visual no interactivo */}
       <View style={StyleSheet.absoluteFill}>
         <Image source={require('../visual/background.png')} style={styles.background} resizeMode="cover" />
       </View>
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Iniciar sesión</Text>
+        <Text style={styles.headerTitle}>{t('login.headerTitle')}</Text>
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Bienvenido</Text>
-        <Text style={styles.subtitle}>Ingrese el correo con el cual fue registrado</Text>
+        <Text style={styles.title}>{t('login.title')}</Text>
+        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="usuario@email.com"
+          placeholder={t('login.emailPlaceholder')}
           placeholderTextColor={COLORS.placeholder}
           value={email}
           onChangeText={setEmail}
@@ -85,7 +88,9 @@ export default function Login() {
         />
 
         <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? 'Enviando...' : 'Enviar link de autenticacion'}</Text>
+          <Text style={styles.buttonText}>
+            {loading ? t('common.sending') : t('login.sendMagicLink')}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -155,13 +160,21 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: COLORS.orange,
-    padding: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderRadius: 8,
     alignItems: 'center',
+    width: '100%',
+    minHeight: 56,
+    justifyContent: 'center',
   },
   buttonText: {
     color: COLORS.blueDark,
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    width: '100%',
+    lineHeight: 22,
+    flexShrink: 1,
   },
 });

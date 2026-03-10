@@ -1,36 +1,36 @@
-//Archivo: \lib\pushNotifications.ts
-/*Maneja la lógica de notificaciones push, obtiene push token, pide permisos
-identifica si es dispositivo móvil o web para usar Expo Push o FCM respectivamente,
-y guarda device_info y last_seen_at*/
+// Modulo: pushNotifications
+// Objetivo:
+// - Registrar el dispositivo/navegador actual para recibir push.
+// - Soportar dos canales: Expo Push (mobile) y FCM (web).
+// - Guardar/actualizar token en tabla `notifications` de Supabase.
+
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
-//Declaración de constantes 
 const isDevice = Device.isDevice;
 const model = Device.modelName;
 const version = Device.osVersion;
 const OS = Platform.OS;
 
-// Este tipo mantiene la firma de la tabla `notifications` y evita enviar payloads ambiguos.
+// Firma alineada con la columna `platform` en tabla notifications.
 type PushPlatform = 'expo' | 'web_fcm';
 
-// Configuramos comportamiento visual basico cuando llega una notificacion en primer plano.
-// En mobile esto controla alerta/sonido/badge; en web no tiene efecto.
+// Comportamiento visual cuando llega notificacion en primer plano.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: false,
-    shouldSetBadge: false
+    shouldSetBadge: false,
   }),
 });
 
 function getExpoProjectId(): string | undefined {
-  // Expo Push requiere `projectId` en builds EAS; usamos varias fuentes para cubrir dev/prod.
+  // Expo Push requiere projectId (EAS); probamos multiples fuentes.
   const easProjectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId ??
@@ -45,7 +45,7 @@ async function upsertPushToken(params: {
   token: string;
   deviceInfo: Record<string, unknown>;
 }) {
-  // Guardamos o actualizamos por (platform, token) para no duplicar endpoints.
+  // onConflict evita duplicados por token/plataforma.
   const { error } = await supabase
     .from('notifications')
     .upsert(
@@ -65,34 +65,28 @@ async function upsertPushToken(params: {
   }
 }
 
-
-
 async function registerExpoToken(userId: string) {
-
-  const projectId = getExpoProjectId();
-  const permissions = await Notifications.getPermissionsAsync();
-  let finalStatus = permissions.status;
-  const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
-
-  // Push nativo solo funciona en dispositivo fisico (emuladores suelen no tener token valido).
+  // Flujo mobile: permisos -> token Expo -> persistencia en DB.
+  // Push nativo requiere dispositivo fisico.
   if (!isDevice) return;
 
-  // Verificamos o pedimos permiso para notificaciones.
+  const permissions = await Notifications.getPermissionsAsync();
+  let finalStatus = permissions.status;
 
-
-  // Pedimos permiso si aun no fue concedido.
   if (finalStatus !== 'granted') {
     const request = await Notifications.requestPermissionsAsync();
     finalStatus = request.status;
   }
 
   if (finalStatus !== 'granted') return;
-  
+
+  const projectId = getExpoProjectId();
   if (!projectId) {
-    // Sin projectId no hay token Expo en builds modernos.
     console.warn('No hay EXPO projectId para registrar push token.');
     return;
   }
+
+  const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
 
   await upsertPushToken({
     userId,
@@ -111,7 +105,7 @@ async function registerExpoToken(userId: string) {
 }
 
 async function registerWebFcmToken(userId: string) {
-  // En web usamos FCM para push real tipo "WhatsApp Web" (incluye background con service worker).
+  // Flujo web: permiso browser -> service worker -> token FCM -> persistencia en DB.
   const permission = await Notification.requestPermission();
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -121,16 +115,15 @@ async function registerWebFcmToken(userId: string) {
     appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
   };
   const vapidKey = process.env.EXPO_PUBLIC_FIREBASE_VAPID_KEY;
-  
+
   if (permission !== 'granted') return;
 
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.messagingSenderId || !firebaseConfig.appId || !vapidKey) {
-    // Evitamos romper la app si faltan variables de entorno.
     console.warn('Faltan variables EXPO_PUBLIC_FIREBASE_* para web push.');
     return;
   }
 
-  // Import dinamico para no cargar Firebase en native.
+  // Import dinamico para evitar dependencias de Firebase en runtime native.
   const [{ getApp, getApps, initializeApp }, { getMessaging, getToken, isSupported }] = await Promise.all([
     import('firebase/app'),
     import('firebase/messaging'),
@@ -142,7 +135,7 @@ async function registerWebFcmToken(userId: string) {
   const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   const messaging = getMessaging(app);
 
-  // Pasamos config por query params para no hardcodear secretos en el service worker.
+  // Pasamos config por query params al SW para evitar hardcodeo.
   const swParams = new URLSearchParams({
     apiKey: firebaseConfig.apiKey,
     authDomain: firebaseConfig.authDomain ?? '',
@@ -174,7 +167,7 @@ async function registerWebFcmToken(userId: string) {
 }
 
 export async function registerCurrentDevicePushToken(userId: string) {
-  // Punto unico para registro: delega segun plataforma.
+  // Punto unico invocado por la app tras login/refresh de sesion.
   if (!userId) return;
 
   try {

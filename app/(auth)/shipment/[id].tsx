@@ -4,11 +4,11 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../../components/LogoCorner';
 import { supabase } from '../../../lib/supabase';
 
-// Modelo de datos de la tabla shipments usado por esta vista.
 type Shipment = {
   id: string;
   do_number: string;
@@ -26,10 +26,9 @@ type Shipment = {
   flight_vessel?: string;
   container_number?: string;
   carrier?: string;
-  client_id: string;
+  client_id?: string;
 };
 
-// Modelo del historial de actualizaciones de una carga.
 type ShipmentUpdate = {
   id: string;
   shipment_id: string;
@@ -39,7 +38,6 @@ type ShipmentUpdate = {
   observation?: string;
 };
 
-// Modelo de documentos asociados a una carga.
 type Document = {
   id: string;
   shipment_id: string;
@@ -62,34 +60,22 @@ const COLORS = {
 };
 
 export default function ShipmentDetail() {
-  // ID de carga recibido por ruta dinamica /shipment/[id].
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
-
-  // Datos principales del embarque actual.
   const [shipment, setShipment] = useState<Shipment | null>(null);
-  // Historial de cambios (estado, ubicacion y observaciones).
   const [updates, setUpdates] = useState<ShipmentUpdate[]>([]);
-  // Documentos asociados a la carga.
   const [documents, setDocuments] = useState<Document[]>([]);
-
-  // Estado de carga inicial de la pantalla.
   const [loading, setLoading] = useState(true);
-  // Estado de progreso para subida de archivo.
   const [uploadingDocument, setUploadingDocument] = useState(false);
-  // ID del documento que se esta intentando abrir.
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
-
-  // Permisos del usuario autenticado.
+  const [deletingShipment, setDeletingShipment] = useState(false);
   const [isInternal, setIsInternal] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Carga datos cada vez que cambia el id de la ruta.
   useEffect(() => {
     void loadShipmentDetails();
   }, [id]);
 
-  // Trae usuario, perfil, carga, historial y documentos visibles.
   const loadShipmentDetails = async () => {
     try {
       const {
@@ -104,7 +90,6 @@ export default function ShipmentDetail() {
 
       setUserId(user.id);
 
-      // Determina si el usuario es interno para habilitar acciones de edicion/subida.
       const { data: profile } = await supabase
         .from('profiles')
         .select('is_internal')
@@ -113,7 +98,6 @@ export default function ShipmentDetail() {
 
       setIsInternal(profile?.is_internal || false);
 
-      // Carga el detalle de la carga solicitada.
       const { data: shipmentData, error: shipmentError } = await supabase
         .from('shipments')
         .select('*')
@@ -121,12 +105,18 @@ export default function ShipmentDetail() {
         .single();
 
       if (shipmentError) throw shipmentError;
-
       setShipment(shipmentData);
-      setIsOwner(shipmentData.client_id === user.id);
 
-      // Solo internos o dueno ven historial y documentos completos.
-      if (shipmentData.client_id === user.id || profile?.is_internal) {
+      const { data: relationData } = await supabase
+        .from('profile_shipment')
+        .select('profile_id')
+        .eq('shipment_id', id)
+        .eq('profile_id', user.id)
+        .maybeSingle();
+
+      const assignedToUser = Boolean(relationData);
+
+      if (assignedToUser || profile?.is_internal) {
         const { data: updatesData } = await supabase
           .from('shipment_updates')
           .select('*')
@@ -144,22 +134,55 @@ export default function ShipmentDetail() {
       }
     } catch (error) {
       console.error('Error cargando detalle de carga:', error);
-      Alert.alert('Error', 'No se pudo cargar el detalle de la carga');
+      Alert.alert(t('common.error'), t('shipmentDetail.loadError'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Selecciona y sube un documento al bucket `documents`.
-  const handleUploadDocument = async () => {
+  const handleDeactive = async () => {
+    setDeletingShipment(true);
     if (!isInternal) {
-      Alert.alert('Error', 'Solo usuarios internos pueden subir documentos');
+      Alert.alert(t('common.error'), t('shipmentDetail.internalDeleteOnly'));
+      setDeletingShipment(false);
       return;
     }
 
     const shipmentId = String(id ?? '');
     if (!shipmentId) {
-      Alert.alert('Error', 'ID de carga invalido');
+      Alert.alert(t('common.error'), t('shipmentDetail.invalidShipmentId'));
+      setDeletingShipment(false);
+      return;
+    }
+    try {
+      const { error: deactiveError } = await supabase
+        .from('shipments')
+        .update({ status: 'inactive' })
+        .eq('id', shipmentId);
+
+      if (deactiveError) {
+        throw deactiveError;
+      }
+
+      Alert.alert(t('common.success'), t('shipmentDetail.deactivatedOk'));
+      router.replace('/');
+    } catch (error) {
+      console.error('Error eliminando carga:', error);
+      Alert.alert(t('common.error'), t('shipmentDetail.deactivateError'));
+    } finally {
+      setDeletingShipment(false);
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    if (!isInternal) {
+      Alert.alert(t('common.error'), t('shipmentDetail.internalUploadOnly'));
+      return;
+    }
+
+    const shipmentId = String(id ?? '');
+    if (!shipmentId) {
+      Alert.alert(t('common.error'), t('shipmentDetail.invalidShipmentId'));
       return;
     }
 
@@ -191,10 +214,9 @@ export default function ShipmentDetail() {
         });
 
       if (uploadError || !uploaded?.path) {
-        throw uploadError || new Error('No se pudo subir el archivo');
+        throw uploadError || new Error(t('shipmentDetail.uploadError'));
       }
 
-      // Inserta metadata minima obligatoria en la tabla documents.
       const baseInsert = {
         shipment_id: shipmentId,
         file_name: asset.name || safeName,
@@ -209,16 +231,14 @@ export default function ShipmentDetail() {
         .single();
 
       if (insertError) {
-        // Si falla DB, intenta limpiar el archivo subido para no dejar basura en storage.
         try {
           await supabase.storage.from('documents').remove([uploaded.path]);
         } catch {
-          // No bloquea: el error principal es el de base de datos.
+          // no-op
         }
         throw insertError;
       }
 
-      // Intento opcional de metadatos extra (si las columnas existen en tu esquema).
       if (insertedDoc?.id) {
         await supabase
           .from('documents')
@@ -229,7 +249,6 @@ export default function ShipmentDetail() {
           .eq('id', insertedDoc.id);
       }
 
-      // Refleja el nuevo documento inmediatamente en pantalla.
       setDocuments((prev) => [
         ...prev,
         {
@@ -242,16 +261,15 @@ export default function ShipmentDetail() {
         },
       ]);
 
-      Alert.alert('Exito', 'Documento subido correctamente');
+      Alert.alert(t('common.success'), t('shipmentDetail.uploadOk'));
     } catch (error) {
       console.error('Error subiendo documento:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo subir el documento');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('shipmentDetail.uploadError'));
     } finally {
       setUploadingDocument(false);
     }
   };
 
-  // Resuelve la ruta en storage para poder generar URL firmada.
   const resolveStoragePath = async (doc: Document) => {
     if (doc.file_path) return doc.file_path;
     if (doc.storage_path) return doc.storage_path;
@@ -259,7 +277,6 @@ export default function ShipmentDetail() {
     const shipmentId = String(id ?? '');
     if (!shipmentId) return null;
 
-    // Fallback para documentos antiguos: intenta ubicar por nombre dentro de la carpeta de carga.
     const { data: objects, error } = await supabase.storage
       .from('documents')
       .list(shipmentId, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
@@ -272,14 +289,13 @@ export default function ShipmentDetail() {
     return match ? `${shipmentId}/${match.name}` : null;
   };
 
-  // Genera URL firmada y abre el documento en el visor externo del dispositivo.
   const handleOpenDocument = async (doc: Document) => {
     try {
       setOpeningDocumentId(doc.id);
       const path = await resolveStoragePath(doc);
 
       if (!path) {
-        Alert.alert('Error', 'No se encontro la ruta del documento');
+        Alert.alert(t('common.error'), t('shipmentDetail.documentPathError'));
         return;
       }
 
@@ -288,7 +304,7 @@ export default function ShipmentDetail() {
         .createSignedUrl(path, 60 * 30);
 
       if (error || !data?.signedUrl) {
-        throw error || new Error('No se pudo crear el enlace del documento');
+        throw error || new Error(t('shipmentDetail.openError'));
       }
 
       const canOpen = await Linking.canOpenURL(data.signedUrl);
@@ -299,13 +315,12 @@ export default function ShipmentDetail() {
       await Linking.openURL(data.signedUrl);
     } catch (error) {
       console.error('Error abriendo documento:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo abrir el documento');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('shipmentDetail.openError'));
     } finally {
       setOpeningDocumentId(null);
     }
   };
 
-  // Navegacion de regreso segura con alternativa al dashboard.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -325,12 +340,11 @@ export default function ShipmentDetail() {
   if (!shipment) {
     return (
       <View style={styles.center}>
-        <Text>Carga no encontrada</Text>
+        <Text>{t('shipmentDetail.notFound')}</Text>
       </View>
     );
   }
 
-  // Solo muestra actualizaciones con contenido util.
   const visibleUpdates = updates.filter((update) =>
     Boolean(update.status || update.location || update.observation),
   );
@@ -347,44 +361,42 @@ export default function ShipmentDetail() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Detalle de Carga</Text>
+        <Text style={styles.headerTitle}>{t('shipmentDetail.headerTitle')}</Text>
         <View style={styles.topActions}>
           <TouchableOpacity onPress={backFunction}>
-            <Text style={styles.topActionText}>Volver</Text>
+            <Text style={styles.topActionText}>{t('common.back')}</Text>
           </TouchableOpacity>
           {isInternal && (
             <TouchableOpacity onPress={() => router.push(`/editShipment/${id}`)}>
-              <Text style={styles.topActionText}>Editar</Text>
+              <Text style={styles.topActionText}>{t('shipmentDetail.edit')}</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {/* Informacion principal de la carga */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informacion</Text>
-          <InfoRow label="DO Number" value={shipment.do_number} />
-          <InfoRow label="Via" value={shipment.shipment_type} />
-          <InfoRow label="Origen" value={shipment.origin} />
-          <InfoRow label="Destino" value={shipment.destination} />
-          <InfoRow label="ETD" value={shipment.etd || ''} />
-          <InfoRow label="ETA" value={shipment.eta || ''} />
-          {shipment.incoterm && <InfoRow label="Incoterm" value={shipment.incoterm} />}
-          <InfoRow label="Estado Actual" value={shipment.current_status || ''} />
-          <InfoRow label="Ubicacion Actual" value={shipment.current_location || ''} />
-          <InfoRow label="Exportador" value={shipment.exporter || ''} />
-          <InfoRow label="Consignatario" value={shipment.consignee || ''} />
-          {shipment.air_waybill && <InfoRow label="Guia/Booking" value={shipment.air_waybill} />}
-          {shipment.flight_vessel && <InfoRow label="Vuelo/Motonave" value={shipment.flight_vessel} />}
-          {shipment.container_number && <InfoRow label="Contenedor" value={shipment.container_number} />}
-          {shipment.carrier && <InfoRow label="Naviera/Aerolinea" value={shipment.carrier} />}
+          <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionInfo')}</Text>
+          <InfoRow label={t('shipmentDetail.labels.doNumber')} value={shipment.do_number} />
+          <InfoRow label={t('shipmentDetail.labels.via')} value={shipment.shipment_type} />
+          <InfoRow label={t('shipmentDetail.labels.origin')} value={shipment.origin} />
+          <InfoRow label={t('shipmentDetail.labels.destination')} value={shipment.destination} />
+          <InfoRow label={t('shipmentDetail.labels.etd')} value={shipment.etd || ''} />
+          <InfoRow label={t('shipmentDetail.labels.eta')} value={shipment.eta || ''} />
+          {shipment.incoterm && <InfoRow label={t('shipmentDetail.labels.incoterm')} value={shipment.incoterm} />}
+          <InfoRow label={t('shipmentDetail.labels.status')} value={shipment.current_status || ''} />
+          <InfoRow label={t('shipmentDetail.labels.location')} value={shipment.current_location || ''} />
+          <InfoRow label={t('shipmentDetail.labels.exporter')} value={shipment.exporter || ''} />
+          <InfoRow label={t('shipmentDetail.labels.consignee')} value={shipment.consignee || ''} />
+          {shipment.air_waybill && <InfoRow label={t('shipmentDetail.labels.awb')} value={shipment.air_waybill} />}
+          {shipment.flight_vessel && <InfoRow label={t('shipmentDetail.labels.flight')} value={shipment.flight_vessel} />}
+          {shipment.container_number && <InfoRow label={t('shipmentDetail.labels.container')} value={shipment.container_number} />}
+          {shipment.carrier && <InfoRow label={t('shipmentDetail.labels.carrier')} value={shipment.carrier} />}
         </View>
 
-        {/* Historial */}
         {visibleUpdates.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Observaciones</Text>
+            <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionUpdates')}</Text>
             {visibleUpdates.map((update) => (
               <View key={update.id} style={styles.updateCard}>
                 <Text style={styles.updateDate}>{new Date(update.created_at).toLocaleDateString()}</Text>
@@ -396,10 +408,9 @@ export default function ShipmentDetail() {
           </View>
         )}
 
-        {/* Documentos */}
         {documents.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Documentos</Text>
+            <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionDocuments')}</Text>
             {documents.map((doc) => (
               <TouchableOpacity
                 key={doc.id}
@@ -409,26 +420,39 @@ export default function ShipmentDetail() {
               >
                 <Text style={styles.docName}>{doc.file_name}</Text>
                 <Text style={styles.docSize}>
-                  {openingDocumentId === doc.id ? 'Abriendo...' : `${(doc.file_size / 1024).toFixed(2)} KB`}
+                  {openingDocumentId === doc.id ? t('shipmentDetail.opening') : `${(doc.file_size / 1024).toFixed(2)} KB`}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* Accion para internos */}
         {isInternal && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={[styles.uploadButton, uploadingDocument && styles.uploadButtonDisabled]}
-              onPress={handleUploadDocument}
-              disabled={uploadingDocument}
-            >
-              <Text style={styles.uploadButtonText}>
-                {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <>
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.uploadButton, uploadingDocument && styles.uploadButtonDisabled]}
+                onPress={handleUploadDocument}
+                disabled={uploadingDocument}
+              >
+                <Text style={styles.uploadButtonText}>
+                  {uploadingDocument ? t('shipmentDetail.uploading') : t('shipmentDetail.uploadDocument')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section2}>
+              <TouchableOpacity
+                style={[styles.deleteButton, deletingShipment && styles.uploadButtonDisabled]}
+                onPress={handleDeactive}
+                disabled={deletingShipment}
+              >
+                <Text style={styles.uploadButtonText}>
+                  {deletingShipment ? t('shipmentDetail.deleting') : t('shipmentDetail.deleteShipment')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </ScrollView>
     </View>
@@ -440,7 +464,6 @@ type InfoRowProps = {
   value: string;
 };
 
-// Renderiza una fila label:valor y oculta la fila si el valor esta vacio.
 function InfoRow({ label, value }: InfoRowProps) {
   if (!value) return null;
   return (
@@ -452,17 +475,11 @@ function InfoRow({ label, value }: InfoRowProps) {
 }
 
 const styles = StyleSheet.create({
-  // Clase personalizada: imagen de fondo de pantalla completa.
   background: { width: '100%', height: '100%' },
-  // Clase personalizada: contenedor raiz de la pantalla.
   container: { flex: 1, backgroundColor: 'transparent' },
-  // Clase personalizada: scroll principal para permitir contenido largo.
   scroll: { flex: 1 },
-  // Clase personalizada: area interna con separacion respecto al header fijo.
   content: { zIndex: 1, paddingBottom: 20, paddingTop: 100 },
-  // Clase personalizada: centrado para estados de carga o no encontrado.
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  // Clase personalizada: header superior fijo con titulo y acciones.
   fixedHeader: {
     position: 'absolute',
     top: 0,
@@ -475,7 +492,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
-  // Clase personalizada: titulo principal del detalle.
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -483,7 +499,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  // Clase personalizada: contenedor horizontal para botones Volver/Editar.
   topActions: {
     position: 'absolute',
     right: 16,
@@ -491,69 +506,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  // Clase personalizada: texto de acciones del encabezado.
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
-  // Clase personalizada: bloque de contenido agrupado (informacion, historial, documentos).
   section: {
     backgroundColor: '#fff',
     margin: 10,
     padding: 15,
     borderRadius: 8,
   },
-  // Clase personalizada: titulo de cada seccion.
+  section2: {
+    backgroundColor: '#fff',
+    margin: 10,
+    padding: 15,
+    borderRadius: 8,
+  },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  // Clase personalizada: fila de informacion clave-valor.
   infoRow: {
     flexDirection: 'row',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  // Clase personalizada: etiqueta de la fila de informacion.
   infoLabel: { width: 140, fontWeight: '600', color: '#666' },
-  // Clase personalizada: valor asociado a la etiqueta de informacion.
   infoValue: { flex: 1, color: '#333' },
-  // Clase personalizada: tarjeta de una actualizacion de historial.
   updateCard: {
     padding: 10,
     backgroundColor: '#f9f9f9',
     borderRadius: 6,
     marginBottom: 10,
   },
-  // Clase personalizada: fecha de la actualizacion.
   updateDate: { fontSize: 12, color: '#999', marginBottom: 5 },
-  // Clase personalizada: estado registrado en la actualizacion.
   updateStatus: { fontWeight: '600', marginBottom: 3 },
-  // Clase personalizada: ubicacion registrada en la actualizacion.
   updateLocation: { color: '#666', marginBottom: 3 },
-  // Clase personalizada: observacion de la actualizacion.
   updateObs: { color: '#333' },
-  // Clase personalizada: tarjeta clickeable de documento.
   docCard: {
     padding: 12,
     backgroundColor: '#f9f9f9',
     borderRadius: 6,
     marginBottom: 8,
   },
-  // Clase personalizada: nombre del archivo.
   docName: { fontWeight: '600', marginBottom: 4 },
-  // Clase personalizada: tamano o estado de apertura del documento.
   docSize: { fontSize: 12, color: '#999' },
-  // Clase personalizada: boton para subir documento.
   uploadButton: {
     backgroundColor: COLORS.blue,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  // Clase personalizada: opacidad reducida para boton deshabilitado.
+  deleteButton: {
+    backgroundColor: '#E53935',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   uploadButtonDisabled: {
     opacity: 0.6,
   },
-  // Clase personalizada: texto del boton de subida.
   uploadButtonText: {
     color: COLORS.cream,
     fontWeight: '700',
   },
 });
-

@@ -11,7 +11,7 @@ export default function LogoCorner() {
   return (
     <View style={styles.wrapper}>
       <TouchableOpacity
-        onPress={()=> router.push('../')}
+        onPress={()=> router.push('/')}
         style={[styles.logo, { width: size, height: 100 }]}
         hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
       <Image

@@ -127,7 +127,7 @@ export default function EditShipment() {
   };
 
   const handleDelete = () => {
-    Alert.alert('Eliminar carga', 'Esta accion no se puede deshacer. ¿Deseas continuar?', [
+    Alert.alert('Eliminar carga', 'Esta acción no se puede deshacer. ¿Deseas continuar?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar',

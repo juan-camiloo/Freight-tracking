@@ -66,7 +66,7 @@ export default function Dashboard() {
       void searchShipment(searchQuery.trim());
     }, 300);
 
-    return () => clearTimeout(timeout);
+      return () => clearTimeout(timeout);
   }, [searchQuery]);
 
   // Valida sesion, determina rol interno y obtiene lista de cargas visible por RLS.
@@ -215,7 +215,7 @@ export default function Dashboard() {
             <TouchableOpacity style={styles.card} onPress={() => router.push(`/shipment/${item.id}`)}>
               <Text style={styles.cardDO}>{item.do_number}</Text>
               <Text style={styles.cardRoute}>
-                {item.origin} {'→'} {item.destination}
+                {item.origin} {'->'} {item.destination}
               </Text>
               <Text style={styles.cardStatus}>{item.current_status}</Text>
               {item.incoterm && <Text style={styles.cardIncoterm}>{item.incoterm}</Text>}

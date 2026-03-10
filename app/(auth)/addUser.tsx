@@ -3,9 +3,10 @@
 
 import { router } from 'expo-router';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Alert, Image, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { supabase } from '../../lib/supabase';
+import { inviteUserFunctionUrl, supabase } from '../../lib/supabase';
 
 const COLORS = {
   blue: '#1E5F99',
@@ -20,18 +21,15 @@ const COLORS = {
 };
 
 export default function AddUser() {
-  // Datos del formulario de invitacion.
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-
-  // Estado visual durante la solicitud de invitacion.
   const [loading, setLoading] = useState(false);
 
-  // Llama la Edge Function invite-user para crear/invitar usuario.
   const handleAddUser = async () => {
     if (!email) {
-      Alert.alert('Error', 'Ingresa un email');
+      Alert.alert(t('common.error'), t('addUser.missingEmail'));
       return;
     }
 
@@ -42,12 +40,13 @@ export default function AddUser() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        Alert.alert('Error', 'No hay sesion activa, vuelve a iniciar sesion');
+        Alert.alert(t('common.error'), t('addUser.noSession'));
         setLoading(false);
         return;
       }
 
-      const response = await fetch('https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/invite-user', {
+      const response = await fetch(
+          inviteUserFunctionUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -59,24 +58,22 @@ export default function AddUser() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error al invitar usuario');
+        throw new Error(data.error || t('addUser.inviteError'));
       }
 
-      console.log('Exito:', data);
-      Alert.alert('Exito', 'Usuario creado, invitacion enviada');
+      Alert.alert(t('common.success'), t('addUser.createdSuccess'));
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Error', error.message);
+        Alert.alert(t('common.error'), error.message);
       } else {
-        Alert.alert('Error', 'Algo salio mal... Intentalo de nuevo');
+        Alert.alert(t('common.error'), t('addUser.unknownError'));
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Vuelve atras con alternativa al dashboard.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -97,18 +94,18 @@ export default function AddUser() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Agregar Usuario</Text>
+        <Text style={styles.headerTitle}>{t('addUser.headerTitle')}</Text>
         <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>Volver</Text>
+          <Text style={styles.topActionText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
         <View style={styles.form}>
-          <Text style={styles.label}>Email del usuario</Text>
+          <Text style={styles.label}>{t('addUser.emailLabel')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="usuario@email.com"
+            placeholder={t('login.emailPlaceholder')}
             placeholderTextColor={COLORS.placeholder}
             value={email}
             onChangeText={setEmail}
@@ -116,10 +113,10 @@ export default function AddUser() {
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Alias del usuario</Text>
+          <Text style={styles.label}>{t('addUser.nicknameLabel')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Alias del usuario (opcional)"
+            placeholder={t('addUser.nicknamePlaceholder')}
             placeholderTextColor={COLORS.placeholder}
             value={nickname}
             onChangeText={setNickname}
@@ -127,7 +124,7 @@ export default function AddUser() {
           />
 
           <View style={styles.switchContainer}>
-            <Text style={styles.label}>Es usuario interno?</Text>
+            <Text style={styles.label}>{t('addUser.isInternal')}</Text>
             <Switch
               value={isInternal}
               onValueChange={setIsInternal}
@@ -137,7 +134,7 @@ export default function AddUser() {
           </View>
 
           <TouchableOpacity style={styles.button} onPress={handleAddUser} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? 'Creando...' : 'Crear Usuario'}</Text>
+            <Text style={styles.buttonText}>{loading ? t('addUser.creating') : t('addUser.createUser')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -146,13 +143,9 @@ export default function AddUser() {
 }
 
 const styles = StyleSheet.create({
-  // Clase personalizada: imagen de fondo para toda la pantalla.
   background: { position: 'absolute', width: '100%', height: '100%' },
-  // Clase personalizada: contenedor raiz.
   container: { flex: 1 },
-  // Clase personalizada: area principal por debajo del header.
   content: { flex: 1, paddingTop: 72 },
-  // Clase personalizada: encabezado fijo con titulo y boton de regreso.
   fixedHeader: {
     position: 'absolute',
     top: 0,
@@ -165,7 +158,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
-  // Clase personalizada: titulo principal del encabezado.
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -173,11 +165,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  // Clase personalizada: contenedor del boton volver.
   topActionContainer: { position: 'absolute', right: 16, top: 25 },
-  // Clase personalizada: texto del boton volver.
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  // Clase personalizada: tarjeta que contiene los campos del formulario.
   form: {
     margin: 16,
     padding: 20,
@@ -187,9 +176,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginTop: 50,
   },
-  // Clase personalizada: etiqueta de los campos del formulario.
   label: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: COLORS.blueDark },
-  // Clase personalizada: input base de email y alias.
   input: {
     borderWidth: 1,
     borderColor: COLORS.blueMid,
@@ -200,21 +187,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cream,
     color: COLORS.blueDark,
   },
-  // Clase personalizada: fila para el switch de usuario interno.
   switchContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 30,
   },
-  // Clase personalizada: boton principal para enviar invitacion.
   button: {
     backgroundColor: COLORS.orange,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
   },
-  // Clase personalizada: texto del boton principal.
   buttonText: { color: COLORS.blueDark, fontSize: 16, fontWeight: '700' },
 });
-

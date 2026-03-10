@@ -1,3 +1,9 @@
+// Edge Function: notify-shipment-event
+// Objetivo:
+// 1) Validar al usuario que dispara el evento.
+// 2) Resolver destinatarios (explicitos o por relacion profile_shipment).
+// 3) Enviar push en Expo y/o FCM web segun plataforma registrada.
+// 4) Devolver resultado sin romper el flujo de la app cliente.
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 export const config = { auth: true };
@@ -15,6 +21,7 @@ type NotifyBody = {
   event_type: EventType;
   shipment_id: string;
   target_user_id?: string | null;
+  target_user_ids?: string[] | null;
   do_number?: string | null;
   status?: string | null;
 };
@@ -24,6 +31,10 @@ type PushEndpoint = {
   platform: Platform;
 };
 
+type ProfileShipmentRelation = {
+  profile_id: string | null;
+};
+
 type ServiceAccount = {
   project_id: string;
   private_key: string;
@@ -31,7 +42,16 @@ type ServiceAccount = {
   token_uri?: string;
 };
 
+async function readJsonSafe(response: Response): Promise<any> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 function json(status: number, payload: Record<string, unknown>) {
+  // Helper para respuestas JSON consistentes con CORS.
   return new Response(JSON.stringify(payload), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -49,6 +69,7 @@ function encodeText(input: string): Uint8Array {
 }
 
 async function importPrivateKey(pem: string): Promise<CryptoKey> {
+  // Convierte la private key PEM del service account a CryptoKey utilizable por Web Crypto.
   const sanitized = pem
     .replace("-----BEGIN PRIVATE KEY-----", "")
     .replace("-----END PRIVATE KEY-----", "")
@@ -65,6 +86,7 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
 }
 
 async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<string> {
+  // Construye y firma un JWT para intercambiarlo por un access_token OAuth de Google.
   const now = Math.floor(Date.now() / 1000);
   const jwtHeader = { alg: "RS256", typ: "JWT" };
   const jwtClaims = {
@@ -111,6 +133,7 @@ async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<str
 }
 
 function buildMessage(eventType: EventType, doNumber?: string | null, status?: string | null) {
+  // Normaliza el texto de notificacion segun tipo de evento.
   const doLabel = doNumber?.trim() ? doNumber : "tu carga";
   if (eventType === "assigned") {
     return {
@@ -133,7 +156,8 @@ function buildMessage(eventType: EventType, doNumber?: string | null, status?: s
 }
 
 async function sendExpoPush(tokens: string[], title: string, body: string, link: string) {
-  if (tokens.length === 0) return;
+  // Envia notificaciones a dispositivos nativos registrados con Expo token.
+  if (tokens.length === 0) return [];
   const messages = tokens.map((token) => ({
     to: token,
     title,
@@ -141,7 +165,7 @@ async function sendExpoPush(tokens: string[], title: string, body: string, link:
     data: { link },
   }));
 
-  await fetch("https://exp.host/--/api/v2/push/send", {
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -149,6 +173,26 @@ async function sendExpoPush(tokens: string[], title: string, body: string, link:
     },
     body: JSON.stringify(messages),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Expo Push respondio ${response.status}: ${errorText}`);
+  }
+
+  const payload = await readJsonSafe(response);
+  const tickets = Array.isArray(payload?.data) ? payload.data : [];
+
+  const invalidExpoTokens = tickets
+    .map((ticket: any, index: number) => ({ ticket, token: tokens[index] }))
+    .filter(({ ticket }) =>
+      ticket?.status === "error" &&
+      (ticket?.details?.error === "DeviceNotRegistered" ||
+        ticket?.details?.error === "InvalidCredentials"),
+    )
+    .map(({ token }) => token)
+    .filter((token): token is string => typeof token === "string" && token.length > 0);
+
+  return invalidExpoTokens;
 }
 
 async function sendWebPush(
@@ -158,13 +202,15 @@ async function sendWebPush(
   link: string,
   serviceAccount: ServiceAccount,
 ) {
-  if (tokens.length === 0) return;
+  // Envia notificaciones web via FCM HTTP v1 usando OAuth de service account.
+  if (tokens.length === 0) return [];
   const accessToken = await getGoogleAccessToken(serviceAccount);
   const endpoint = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
 
+  const invalidWebTokens: string[] = [];
   await Promise.all(
     tokens.map(async (token) => {
-      await fetch(endpoint, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -186,8 +232,43 @@ async function sendWebPush(
           },
         }),
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const looksInvalidToken =
+          response.status === 400 ||
+          response.status === 404 ||
+          /UNREGISTERED|registration token/i.test(errorText);
+        if (looksInvalidToken) {
+          invalidWebTokens.push(token);
+        }
+      }
     }),
   );
+
+  return invalidWebTokens;
+}
+
+async function deactivateInvalidTokens(
+  supabase: ReturnType<typeof createClient>,
+  platform: Platform,
+  tokens: string[],
+) {
+  if (tokens.length === 0) return;
+
+  const uniqueTokens = Array.from(new Set(tokens));
+  const { error } = await supabase
+    .from("notifications")
+    .update({
+      active: false,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq("platform", platform)
+    .in("token", uniqueTokens);
+
+  if (error) {
+    console.error(`No se pudieron desactivar tokens ${platform}:`, error.message);
+  }
 }
 
 serve(async (req) => {
@@ -196,6 +277,7 @@ serve(async (req) => {
   }
 
   try {
+    // 1) Validacion de autenticacion del request.
     const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return json(401, { error: "Falta el encabezado de autorizacion" });
@@ -220,6 +302,7 @@ serve(async (req) => {
       return json(401, { error: "Token o sesion invalida" });
     }
 
+    // 2) Validacion de payload minimo.
     const body = (await req.json()) as NotifyBody;
     if (!body?.event_type || !body?.shipment_id) {
       return json(400, { error: "event_type y shipment_id son obligatorios" });
@@ -231,9 +314,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // 3) Carga opcional de datos de shipment (para enriquecer mensaje).
     const { data: shipmentRow, error: shipmentError } = await supabase
       .from("shipments")
-      .select("id, do_number, client_id, current_status")
+      .select("id, do_number, current_status")
       .eq("id", body.shipment_id)
       .maybeSingle();
 
@@ -242,15 +326,46 @@ serve(async (req) => {
       return json(400, { error: shipmentError.message });
     }
 
-    const targetUserId = body.target_user_id ?? shipmentRow?.client_id ?? null;
-    if (!targetUserId) {
+    // 4) Resolucion de destinatarios: target_user_ids -> target_user_id -> relaciones DB.
+    const explicitTargetUserIds = (body.target_user_ids ?? []).filter((value): value is string =>
+      typeof value === "string" && value.length > 0
+    );
+
+    let targetUserIds = Array.from(new Set(explicitTargetUserIds));
+
+    if (targetUserIds.length === 0 && body.target_user_id) {
+      targetUserIds = [body.target_user_id];
+    }
+
+    if (targetUserIds.length === 0) {
+      const { data: relationRows, error: relationsError } = await supabase
+        .from("profile_shipment")
+        .select("profile_id")
+        .eq("shipment_id", body.shipment_id);
+
+      if (relationsError && body.event_type !== "deleted") {
+        return json(400, { error: relationsError.message });
+      }
+
+      const relations = (relationRows ?? []) as ProfileShipmentRelation[];
+      targetUserIds = Array.from(
+        new Set(
+          relations
+            .map((row) => row.profile_id)
+            .filter((value): value is string => typeof value === "string" && value.length > 0),
+        ),
+      );
+    }
+
+    if (targetUserIds.length === 0) {
       return json(200, { sent: 0, reason: "No hay destinatario para notificar" });
     }
 
+    // 5) Obtencion de endpoints push activos por usuario.
     const { data: endpoints, error: endpointsError } = await supabase
       .from("notifications")
       .select("token, platform")
-      .eq("user_id", targetUserId)
+      .in("user_id", targetUserIds)
       .eq("active", true);
 
     if (endpointsError) {
@@ -262,6 +377,7 @@ serve(async (req) => {
       return json(200, { sent: 0, reason: "Usuario sin tokens activos" });
     }
 
+    // 6) Construccion de mensaje/link y envio por plataforma.
     const doNumber = body.do_number ?? shipmentRow?.do_number ?? null;
     const status = body.status ?? shipmentRow?.current_status ?? null;
     const message = buildMessage(body.event_type, doNumber, status);
@@ -273,13 +389,21 @@ serve(async (req) => {
     const expoTokens = rows.filter((row) => row.platform === "expo").map((row) => row.token);
     const webTokens = rows.filter((row) => row.platform === "web_fcm").map((row) => row.token);
 
-    await sendExpoPush(expoTokens, message.title, message.body, link);
+    const invalidExpoTokens = await sendExpoPush(expoTokens, message.title, message.body, link);
+    await deactivateInvalidTokens(supabase, "expo", invalidExpoTokens);
 
     if (webTokens.length > 0) {
       const serviceJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
       if (serviceJson) {
         const serviceAccount = JSON.parse(serviceJson) as ServiceAccount;
-        await sendWebPush(webTokens, message.title, message.body, link, serviceAccount);
+        const invalidWebTokens = await sendWebPush(
+          webTokens,
+          message.title,
+          message.body,
+          link,
+          serviceAccount,
+        );
+        await deactivateInvalidTokens(supabase, "web_fcm", invalidWebTokens);
       }
     }
 

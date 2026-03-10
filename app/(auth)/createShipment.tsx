@@ -1,11 +1,14 @@
-// Archivo: app/(auth)/createShipment.tsx
-// Descripcion: Pantalla para crear una nueva carga. Recolecta datos del formulario y llama la Edge Function create-shipment.
+// Pantalla: createShipment
+// Objetivo:
+// - Capturar datos de una nueva carga en formulario.
+// - Validar campos minimos en cliente.
+// - Enviar payload a la Edge Function `create-shipment`.
 
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { supabase, supabaseAnonKey } from '../../lib/supabase';
+import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
 
 const COLORS = {
   blue: '#1E5F99',
@@ -70,7 +73,7 @@ export default function CreateShipment() {
       }
 
       const response = await fetch(
-        'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/create-shipment',
+        createShipmentFunctionUrl,
         {
           method: 'POST',
           headers: {

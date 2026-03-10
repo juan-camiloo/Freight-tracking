@@ -1,3 +1,6 @@
+// Layout protegido del grupo (auth).
+// Bloquea render de rutas privadas hasta validar sesion
+// y mantiene registro de token push sincronizado con el estado auth.
 import { Slot, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';

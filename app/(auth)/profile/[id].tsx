@@ -3,6 +3,7 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../../components/LogoCorner';
 import { supabase } from '../../../lib/supabase';
@@ -27,24 +28,15 @@ const COLORS = {
 };
 
 export default function ProfileDetail() {
-  // ID del perfil a visualizar.
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
-
-  // Estado de permisos/usuario actual.
-  const [isOwner, setIsOwner] = useState(false);
-  const [isInternal, setIsInternal] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-
-  // Perfil cargado y estado visual.
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Carga inicial de datos del perfil.
   useEffect(() => {
     void loadProfileDetails();
   }, [id]);
 
-  // Valida sesion, rol y carga datos del perfil solicitado.
   const loadProfileDetails = async () => {
     try {
       const {
@@ -57,16 +49,6 @@ export default function ProfileDetail() {
         return;
       }
 
-      setUserId(user.id);
-
-      const { data: ownProfile } = await supabase
-        .from('profiles')
-        .select('is_internal')
-        .eq('id', user.id)
-        .single();
-
-      setIsInternal(ownProfile?.is_internal || false);
-
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -74,18 +56,15 @@ export default function ProfileDetail() {
         .single();
 
       if (profileError) throw profileError;
-
       setProfile(profileData);
-      setIsOwner(profileData?.id === user.id);
     } catch (error) {
       console.error('Error cargando perfil:', error);
-      alert('Error al cargar perfil');
+      alert(t('profileDetail.loadError'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Navegacion atras segura con alternativa a listado de perfiles.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -105,7 +84,7 @@ export default function ProfileDetail() {
   if (!profile) {
     return (
       <View style={styles.center}>
-        <Text>Perfil no encontrado</Text>
+        <Text>{t('profileDetail.notFound')}</Text>
       </View>
     );
   }
@@ -122,22 +101,22 @@ export default function ProfileDetail() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Perfil</Text>
+        <Text style={styles.headerTitle}>{t('profileDetail.headerTitle')}</Text>
         <View style={styles.topActions}>
           <TouchableOpacity onPress={backFunction}>
-            <Text style={styles.topActionText}>Volver</Text>
+            <Text style={styles.topActionText}>{t('common.back')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push(`/assignShipment/${id}`)}>
-            <Text style={styles.topActionText}>Asignar Carga</Text>
+            <Text style={styles.topActionText}>{t('profileDetail.assignShipment')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informacion</Text>
-          <InfoRow label="Correo" value={profile.email || ''} />
-          <InfoRow label="Alias" value={profile.nickname || ''} />
+          <Text style={styles.sectionTitle}>{t('profileDetail.sectionInfo')}</Text>
+          <InfoRow label={t('profileDetail.email')} value={profile.email || ''} />
+          <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
         </View>
       </ScrollView>
     </View>
@@ -149,7 +128,6 @@ type InfoRowProps = {
   value: string;
 };
 
-// Fila reutilizable para mostrar datos label/valor.
 function InfoRow({ label, value }: InfoRowProps) {
   if (!value) return null;
   return (
@@ -161,17 +139,11 @@ function InfoRow({ label, value }: InfoRowProps) {
 }
 
 const styles = StyleSheet.create({
-  // Clase personalizada: imagen de fondo completa.
   background: { width: '100%', height: '100%' },
-  // Clase personalizada: contenedor raiz de pantalla.
   container: { flex: 1, backgroundColor: 'transparent' },
-  // Clase personalizada: scroll principal.
   scroll: { flex: 1 },
-  // Clase personalizada: area interna con separacion del header.
   content: { zIndex: 1, paddingBottom: 20, paddingTop: 100 },
-  // Clase personalizada: centrado para estados de carga o vacio.
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  // Clase personalizada: encabezado fijo superior.
   fixedHeader: {
     position: 'absolute',
     top: 0,
@@ -184,7 +156,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
-  // Clase personalizada: titulo del header.
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -192,7 +163,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  // Clase personalizada: contenedor de botones de accion del header.
   topActions: {
     position: 'absolute',
     right: 16,
@@ -200,27 +170,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  // Clase personalizada: texto de botones del header.
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
-  // Clase personalizada: tarjeta de informacion del perfil.
   section: {
     backgroundColor: '#fff',
     margin: 10,
     padding: 15,
     borderRadius: 8,
   },
-  // Clase personalizada: titulo de seccion.
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  // Clase personalizada: fila de informacion label/valor.
   infoRow: {
     flexDirection: 'row',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  // Clase personalizada: etiqueta del dato.
   infoLabel: { width: 140, fontWeight: '600', color: '#666' },
-  // Clase personalizada: valor del dato.
   infoValue: { flex: 1, color: '#333' },
 });
-
