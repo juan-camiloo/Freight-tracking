@@ -1,0 +1,627 @@
+{ "bot_profile": { 
+    "name": "Ingelox Assistant", 
+    "personality": "profesional, claro, amable, directo", 
+    "scope": "informacion logistica de embarques, operaciones, tracking y facturacion basica", 
+    "requires_do_for_shipment_queries": true }, 
+"escalation_rules": { 
+    "missing_data": "escalar_humano", 
+    "null_database_fields": "escalar_humano", 
+    "precise_date_requested": "escalar_humano",
+    "special_cargo_case": "escalar_humano", 
+    "unknown_question": "escalar_humano" },
+"intents": [
+  {
+    "intent": "factura_fecha_emision",
+    "category": "administrativo",
+    "examples": [
+      "cuando recibiré la factura",
+      "cuando me llega la factura",
+      "fecha de factura de mi embarque",
+      "cuándo emiten mi factura"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number"]
+    },
+    "response_template": "Para informarte sobre la fecha de tu factura, por favor confírmanos tu número de DO y si es importación o exportación.",
+    "escalate_if": [
+      "cliente solicita dato más específico"
+    ]
+  },
+  {
+    "intent": "cuenta_bancaria_pago",
+    "category": "administrativo",
+    "examples": [
+      "a qué cuenta debo pagar",
+      "número de cuenta bancaria",
+      "dónde hago la transferencia",
+      "cuenta para pagar factura"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Puedes realizar tu pago a las siguientes cuentas:\n- CTA. AHORROS DAVIVIENDA 462400031375\n- CTA. AHORROS GLOBAL66 9005269171",
+    "escalate_if": []
+  },
+  {
+    "intent": "cobro_iva",
+    "category": "administrativo",
+    "examples": [
+      "por qué me cobran IVA",
+      "IVA en la factura",
+      "mis servicios tienen IVA",
+      "el IVA es obligatorio"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Nuestros servicios propios generan IVA.",
+    "escalate_if": []
+  },
+  {
+    "intent": "pago_pse",
+    "category": "administrativo",
+    "examples": [
+      "puedo pagar por PSE",
+      "aceptan PSE",
+      "pago electrónico PSE",
+      "pago en línea"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Por el momento no es posible pagar por PSE. Los pagos se realizan a:\n- CTA. AHORROS DAVIVIENDA 462400031375\n- CTA. AHORROS GLOBAL66 9005269171",
+    "escalate_if": []
+  },
+  {
+    "intent": "envio_soporte_pago",
+    "category": "administrativo",
+    "examples": [
+      "dónde envío el soporte de pago",
+      "a quién mando el comprobante",
+      "correo para enviar pago",
+      "a dónde mando el recibo de pago"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Envía tu soporte de pago al correo admin@ingelox.com.co",
+    "escalate_if": []
+  },
+  {
+    "intent": "disputa_reclamacion_factura",
+    "category": "administrativo",
+    "examples": [
+      "cómo hago una reclamación",
+      "quiero disputar una factura",
+      "tengo un cobro incorrecto",
+      "cómo genero una disputa"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Para generar una disputa o reclamación sobre una factura de INGELOX, escríbenos al correo admin@ingelox.com.co",
+    "escalate_if": []
+  },
+  {
+    "intent": "retenciones_factura",
+    "category": "administrativo",
+    "examples": [
+      "qué retenciones debo aplicar",
+      "retención en la fuente",
+      "reteiva reteica factura",
+      "cómo aplico retenciones"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "credito_vigente",
+    "category": "administrativo",
+    "examples": [
+      "tengo crédito con ingelox",
+      "mi crédito está vigente",
+      "cupo de crédito disponible",
+      "saldo de crédito"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "dudas_factura",
+    "category": "administrativo",
+    "examples": [
+      "tengo dudas con mi factura",
+      "no entiendo mi factura",
+      "hay un error en mi factura",
+      "quiero revisar mi factura"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "correo_recepcion_facturas",
+    "category": "administrativo",
+    "examples": [
+      "a qué correo llegan las facturas",
+      "dónde recibo mis facturas",
+      "correo de facturas",
+      "email de facturación"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "dias_libres_origen_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cuántos días libres tengo en origen",
+      "free days origen",
+      "días sin demora en origen",
+      "días libres para embarcar"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "La generalidad son 10 días libres en origen para contenedores dry.",
+    "escalate_if": [
+      "cliente solicita respuesta más específica"
+    ]
+  },
+  {
+    "intent": "cutoff_vgm_documental_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cuándo es el cut off",
+      "fecha VGM",
+      "cut off documental",
+      "límite documental embarque"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "documentary_cutoff"]
+    },
+    "response_template": "El cut off será el día {documentary_cutoff}.",
+    "escalate_if": [
+      "documentary_cutoff_null",
+      "documentary_cutoff_vacio"
+    ]
+  },
+  {
+    "intent": "fecha_cargue_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cuándo se hace el cargue",
+      "fecha de cargue del contenedor",
+      "cuándo cargan mi mercancía",
+      "cuando es el cargue"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "eta"]
+    },
+    "response_template": "Aproximadamente una semana antes del arribo de la motonave ({eta}).",
+    "escalate_if": [
+      "cliente solicita fecha específica"
+    ]
+  },
+  {
+    "intent": "retiro_contenedor_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cuándo se retira el contenedor",
+      "fecha de retiro del contenedor",
+      "cuándo recogen el contenedor",
+      "cuando hacen el retiro"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "etd", "cargo_type"]
+    },
+    "response_template": "Cada caso es especial. Para equipo especial o mercancía peligrosa: de 5 a 7 días calendario antes de la ETD (en tu caso {etd}). Para carga general: de 7 a 10 días calendario antes de la ETD.",
+    "escalate_if": [
+      "cliente solicita fecha específica"
+    ]
+  },
+  {
+    "intent": "eta_destino_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cuándo llega mi embarque a destino",
+      "eta exportación",
+      "fecha de llegada al destino",
+      "cuándo arriba mi carga"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "eta"]
+    },
+    "response_template": "Su embarque está previsto a llegar a destino el {eta}.",
+    "escalate_if": [
+      "eta_null",
+      "cliente solicita fecha específica confirmada"
+    ]
+  },
+  {
+    "intent": "ubicacion_embarque_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "dónde está mi embarque",
+      "ubicación actual de mi carga",
+      "en qué parte va mi contenedor",
+      "tracking de mi embarque expo"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "eta", "current_location"]
+    },
+    "response_template": "La fecha de ETA se mantiene de acuerdo al último reporte enviado y se prevé que llegue el {eta}.",
+    "escalate_if": [
+      "eta_null",
+      "current_location_null",
+      "cliente solicita fecha específica"
+    ]
+  },
+  {
+    "intent": "estado_reserva_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "ya tenemos reserva confirmada",
+      "estado de mi booking",
+      "confirmaron mi reserva",
+      "está confirmado el booking"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "booking_status"]
+    },
+    "response_template": "Tu reserva se encuentra en estado {booking_status}. Si no has recibido la confirmación, el tiempo estimado de respuesta por parte de la naviera es de 12 horas para carga general. Para mercancía peligrosa o equipo especial el tiempo puede aumentar.",
+    "escalate_if": [
+      "booking_status_null",
+      "carga_especial_o_peligrosa"
+    ]
+  },
+  {
+    "intent": "inspeccion_embarque_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "mi embarque fue a inspección",
+      "inspeccionaron mi carga",
+      "hay inspección física",
+      "inspección documental embarque"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "inspection_status"]
+    },
+    "response_template": "Se verificará esa información y se actualizará el sistema lo más pronto posible.",
+    "escalate_if": [
+      "sin_respuesta_12_horas"
+    ]
+  },
+  {
+    "intent": "tracking_embarque_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "cómo hago tracking",
+      "seguimiento a mi embarque",
+      "cómo rastro mi carga",
+      "dónde veo el tracking"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Puedes hacer seguimiento consultando a través del DO, origen o destino en la pantalla principal de la aplicación.",
+    "escalate_if": []
+  },
+  {
+    "intent": "gastos_rollover_expo",
+    "category": "operaciones_maritimas_expo",
+    "examples": [
+      "quién asume el rollover",
+      "gastos por rollover",
+      "costos del rollover",
+      "mi carga tuvo rollover quién paga"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "eta_destino_impo",
+    "category": "operaciones_maritimas_impo",
+    "examples": [
+      "cuándo llega mi importación",
+      "eta de mi embarque impo",
+      "fecha de llegada importación",
+      "cuándo arriba mi contenedor"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "eta"]
+    },
+    "response_template": "Se estima que llegue el {eta}.",
+    "escalate_if": [
+      "eta_null",
+      "eta_vacio"
+    ]
+  },
+  {
+    "intent": "tracking_embarque_impo",
+    "category": "operaciones_maritimas_impo",
+    "examples": [
+      "cómo hago seguimiento importación",
+      "tracking de mi impo",
+      "cómo rastro mi contenedor",
+      "dónde veo mi importación"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Puedes hacer seguimiento consultando a través del DO, origen o destino en la pantalla principal de la aplicación.",
+    "escalate_if": []
+  },
+  {
+    "intent": "dias_libres_impo",
+    "category": "operaciones_maritimas_impo",
+    "examples": [
+      "cuántos días libres tengo de importación",
+      "free days importación",
+      "días sin demurrage",
+      "días libres del contenedor"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "free_days"]
+    },
+    "response_template": "Su embarque cuenta con {free_days} días libres.",
+    "escalate_if": [
+      "free_days_null",
+      "free_days_vacio"
+    ]
+  },
+  {
+    "intent": "devolucion_contenedor_impo",
+    "category": "operaciones_maritimas_impo",
+    "examples": [
+      "cuándo devuelvo el contenedor",
+      "fecha devolución contenedor",
+      "plazo para retornar el contenedor",
+      "cuándo tengo que entregar el contenedor"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "eta_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "cuándo llega mi carga aérea",
+      "tiempo de tránsito aéreo",
+      "eta vuelo",
+      "fecha estimada llegada aéreo"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "eta"]
+    },
+    "response_template": "Tu fecha estimada de llegada es {eta}.",
+    "escalate_if": [
+      "eta_null",
+      "eta_vacio"
+    ]
+  },
+  {
+    "intent": "documentos_entrega_aerolinea",
+    "category": "operaciones_aereas",
+    "examples": [
+      "qué documentos necesito para la aerolínea",
+      "papeles para entregar carga",
+      "documentación requerida aéreo",
+      "qué documentos pide la aerolínea"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "cargo_type"]
+    },
+    "response_template": "Para su carga de tipo {cargo_type} necesita: Factura comercial, lista de empaque, OA, SAE, planilla de traslado (ARIM marítimo), cartas de responsabilidad.\n\nCargas peligrosas: MSDS y declaración de mercancías peligrosas.\nPerecibles: Certificado Fitosanitario o Zoosanitario.\nMedicamentos y químicos: Certificados sanitarios y registro INVIMA.\nMercancía de exportación: Certificado de origen y autorización de embarque.",
+    "escalate_if": [
+      "cliente_continua_con_preguntas_no_respondibles"
+    ]
+  },
+  {
+    "intent": "calculo_flete_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "cómo se calcula el flete aéreo",
+      "fórmula del flete",
+      "cómo calculan el precio del flete",
+      "qué es el peso volumen"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "El flete aéreo se calcula así: TOTAL DE KILOS BRUTOS / VOLUMEN × TARIFA COTIZADA.",
+    "escalate_if": []
+  },
+  {
+    "intent": "carga_peligrosa_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "mi mercancía es peligrosa",
+      "cómo sé si mi carga es peligrosa",
+      "clasificación mercancía peligrosa",
+      "es peligrosa mi carga"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "cargo_type"]
+    },
+    "response_template": "Su carga {cargo_type} es (o no es) considerada peligrosa según su clasificación.",
+    "escalate_if": [
+      "cargo_type_null",
+      "cargo_type_vacio"
+    ]
+  },
+  {
+    "intent": "cutoff_entrega_carga_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "cuál es el cut off aéreo",
+      "límite para entregar la carga",
+      "fecha máxima entrega aerolínea",
+      "hasta cuándo puedo entregar"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "documentary_cutoff"]
+    },
+    "response_template": "El cut off será el día {documentary_cutoff}.",
+    "escalate_if": [
+      "documentary_cutoff_null",
+      "documentary_cutoff_vacio"
+    ]
+  },
+  {
+    "intent": "costos_destino_incoterm_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "quién paga los costos en destino",
+      "costos de importación en destino",
+      "quién asume la aduana destino",
+      "gastos en destino incoterm"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "incoterm"]
+    },
+    "response_template": "En el caso de tu carga, negociada bajo el incoterm {incoterm}:\n- DDP: Vendedor paga todo, incluyendo impuestos y aduanas de importación.\n- DAP: Vendedor paga transporte, comprador paga aduana/descarga.\n- CFR/CIF/CPT/CIP: Vendedor paga flete hasta destino; comprador paga descarga y aduana.\n- EXW/FCA/FAS/FOB: Comprador asume la mayoría de costos desde origen.",
+    "escalate_if": [
+      "incoterm_null"
+    ]
+  },
+  {
+    "intent": "seguro_flete_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "el seguro está incluido en el flete",
+      "flete incluye seguro",
+      "cómo aseguro mi carga",
+      "seguro de la mercancía"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "No, el seguro se toma aparte con base en el valor total de la mercancía.",
+    "escalate_if": []
+  },
+  {
+    "intent": "tracking_embarque_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "cómo hago tracking aéreo",
+      "seguimiento a mi vuelo de carga",
+      "rastreo carga aérea",
+      "dónde veo mi embarque aéreo"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "Puedes hacer seguimiento consultando a través del DO, origen o destino en la pantalla principal de la aplicación.",
+    "escalate_if": [
+      "varios_campos_vacios"
+    ]
+  },
+  {
+    "intent": "vuelo_cancelado_carga_retenida",
+    "category": "operaciones_aereas",
+    "examples": [
+      "qué pasa si se cancela el vuelo",
+      "mi carga se quedó en el avión",
+      "el vuelo fue cancelado qué hago",
+      "carga retenida por vuelo cancelado"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": "¿Es una situación que está ocurriendo actualmente o es una consulta hipotética?",
+    "escalate_if": [
+      "es_preocupacion_real_situacion_actual"
+    ]
+  },
+  {
+    "intent": "tarifa_cotizada_detalle_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "qué incluye la tarifa cotizada",
+      "qué cubre el flete cotizado",
+      "detalle de la tarifa",
+      "qué está incluido en el precio"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "discrepancia_peso_volumen_aereo",
+    "category": "operaciones_aereas",
+    "examples": [
+      "el peso no coincide con lo declarado",
+      "el volumen es diferente al verificado",
+      "diferencia en peso o volumen",
+      "qué pasa si el peso varía"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  },
+  {
+    "intent": "tiempo_bodegaje_aeropuerto",
+    "category": "operaciones_aereas",
+    "examples": [
+      "cuánto tiempo puede estar la carga en el aeropuerto",
+      "días libres de bodegaje",
+      "cuándo empieza a cobrar bodegaje",
+      "tiempo sin costo en aeropuerto"
+    ],
+    "requires_do": false,
+    "database": null,
+    "response_template": null,
+    "escalate_if": [
+      "siempre_escalar"
+    ]
+  }
+]
+}

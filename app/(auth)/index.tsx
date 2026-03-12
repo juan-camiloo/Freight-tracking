@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseAnonKey } from '../../lib/supabase';
 
 const COLORS = {
   blue: '#1E5F99',
@@ -52,6 +52,7 @@ export default function Dashboard() {
 
   // Carga inicial de usuario, rol y cargas.
   useEffect(() => {
+    console.log('SUPABASE_ANON_KEY:', supabaseAnonKey);
     void loadUserAndShipments();
   }, []);
 

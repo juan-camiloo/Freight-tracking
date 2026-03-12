@@ -2,9 +2,9 @@
 // Flujo principal:
 // 1) Obtiene usuario y su ultima conversacion.
 // 2) Lista historial de ai_messages.
-// 3) Envia mensaje a Edge Function `chat-assistant`.
+// 3) Envia mensaje a Edge Function `chatbot`.
 // 4) Refresca la conversacion con respuesta AI o derivacion a ticket.
-/*import { router } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -125,7 +125,7 @@ export default function ChatScreen() {
 
       setInput('');
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/chat-assistant`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/chatbot`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -326,4 +326,4 @@ const styles = StyleSheet.create({
     color: COLORS.cream,
     fontWeight: '700',
   },
-});*/
+});

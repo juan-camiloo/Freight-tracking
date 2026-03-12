@@ -432,3 +432,14 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/notify-shipment-event/deno.json"
 entrypoint = "./functions/notify-shipment-event/index.ts"
+
+[functions.chatbot]
+enabled = true
+verify_jwt = true
+import_map = "./functions/chatbot/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/chatbot/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/chatbot/*.html" ]
