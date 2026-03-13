@@ -28,6 +28,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   function getRedirectTo() {
+    // En web se usa la URL del navegador como base del deep link de retorno.
+    // En nativo se usa el scheme personalizado para que el SO reabra la app.
     if (Platform.OS === 'web') {
       return Linking.createURL('/auth/callback');
     }
@@ -48,6 +50,8 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        // shouldCreateUser: false garantiza que solo usuarios ya invitados
+        // puedan solicitar magic link; rechaza correos no registrados.
         shouldCreateUser: false,
         emailRedirectTo: redirectTo,
       },
@@ -86,6 +90,7 @@ export default function Login() {
           keyboardType="email-address"
           autoCapitalize="none"
           returnKeyType="done"
+          // Permite enviar el formulario desde el teclado sin tocar el boton.
           onSubmitEditing={handleLogin}
         />
 

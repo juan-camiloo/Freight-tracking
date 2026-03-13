@@ -32,7 +32,9 @@ type Shipment = {
   flight_vessel?: string | null;
   container_number?: string | null;
   carrier?: string | null;
+  // Si se provee, la carga se asigna a este usuario en lugar de al creador.
   owner_email?: string | null;
+  // Primera observacion de tracking que se registra en shipment_updates.
   observation?: string | null;
 };
 
@@ -42,7 +44,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1) Validar JWT en Authorization header.
+    // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
     const authHeader =
       req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -54,7 +56,7 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
-    // 2) Resolver usuario autenticado.
+    // 2) Resolver el usuario autenticado a partir del JWT con cliente anon.
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -75,13 +77,14 @@ serve(async (req) => {
       });
     }
 
-    // 3) Cliente admin para validar permisos e insertar en tablas protegidas.
+    // 3) Cliente service role para consultar y escribir en tablas protegidas por RLS.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Solo usuarios internos pueden crear cargas.
+    // Verificar que el solicitante sea un usuario interno antes de crear la carga.
+    // Los usuarios externos (clientes) solo pueden consultar, no crear registros.
     const { data: requesterProfile, error: requesterProfileError } = await supabase
       .from("profiles")
       .select("is_internal")
@@ -95,7 +98,7 @@ serve(async (req) => {
       });
     }
 
-    // 4) Validar payload obligatorio.
+    // 4) Validar que los campos minimos obligatorios esten presentes en el payload.
     const body: Shipment = await req.json();
     const { do_number, origin, destination, owner_email } = body;
 
@@ -106,10 +109,11 @@ serve(async (req) => {
       });
     }
 
-    // 5) Por defecto, el dueno de la carga es quien crea el registro.
+    // 5) Por defecto la carga se asigna al usuario que la crea.
+    // Si se proporciona owner_email, se reasigna al cliente correspondiente,
+    // lo que permite a operadores crear cargas en nombre de sus clientes.
     let ownerId = user.id;
 
-    // Si se envia owner_email, reasignamos propiedad a ese perfil.
     if (owner_email) {
       const { data: ownerProfile, error: ownerError } = await supabase
         .from("profiles")
@@ -127,7 +131,7 @@ serve(async (req) => {
       ownerId = ownerProfile.id;
     }
 
-    // 6) Crear carga principal.
+    // 6) Crear el registro principal de la carga.
     const { data: shipmentData, error: shipmentError } = await supabase
       .from("shipments")
       .insert({
@@ -158,7 +162,10 @@ serve(async (req) => {
       });
     }
 
-    // 7) Asegurar relacion usuario-carga para RLS y vistas del cliente.
+    // 7) Crear la relacion usuario-carga en profile_shipment.
+    // Esta relacion es necesaria para que las politicas RLS del cliente
+    // le permitan ver y filtrar sus propias cargas.
+    // Se usa upsert para evitar duplicados si la relacion ya existiera por algun motivo.
     const { error: relationError } = await supabase
       .from("profile_shipment")
       .upsert(
@@ -167,7 +174,8 @@ serve(async (req) => {
       );
 
     if (relationError) {
-      // Rollback simple para no dejar carga huerfana sin relacion.
+      // Si falla la relacion, se elimina la carga para no dejar un registro
+      // huerfano que el cliente no podria ver ni que el sistema asociaria a nadie.
       await supabase.from("shipments").delete().eq("id", shipmentData.id);
       return new Response(relationError.message, {
         status: 400,
@@ -175,7 +183,8 @@ serve(async (req) => {
       });
     }
 
-    // 8) Registrar primera novedad de tracking.
+    // 8) Registrar la primera novedad de tracking del ciclo de vida de la carga.
+    // Garantiza que siempre haya al menos un evento inicial en el historial.
     const { data: shipmentUpdateData, error: shipmentUpdateError } = await supabase
       .from("shipment_updates")
       .insert({
@@ -194,11 +203,14 @@ serve(async (req) => {
       });
     }
 
+    // Devuelve el merge del shipment y su primera novedad para que el cliente
+    // tenga todo el estado inicial en una sola respuesta.
     return new Response(JSON.stringify({ ...shipmentData, ...shipmentUpdateData }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },
       status: 201,
     });
   } catch (error) {
+    // Captura errores no controlados para evitar exponer stack traces al cliente.
     return new Response(
       error instanceof Error ? error.message : "Ocurrio un error inesperado",
       {

@@ -22,6 +22,7 @@ const COLORS = {
 };
 
 // Modelo minimo usado para renderizar cada tarjeta de carga.
+// Solo se seleccionan los campos necesarios para la lista, no el shipment completo.
 type ShipmentListItem = {
   id: string;
   do_number: string;
@@ -37,26 +38,26 @@ const isAbortError = (error: unknown) =>
   (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
 
 export default function Dashboard() {
-  // Valor del buscador.
+  // Valor actual del campo de busqueda.
   const [searchQuery, setSearchQuery] = useState('');
-  // Datos completos que devuelve la consulta inicial.
+  // Datos completos devueltos por la carga inicial de cargas.
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
-  // Resultados filtrados por texto.
+  // Resultados filtrados al buscar; se usa en lugar de shipments cuando hay query activo.
   const [searchResults, setSearchResults] = useState<ShipmentListItem[]>([]);
-  // Estado de busqueda para uso visual.
+  // Indicador visual de busqueda en progreso.
   const [searching, setSearching] = useState(false);
-  // Estado de carga de pantalla.
+  // Indicador de carga inicial de la pantalla.
   const [loading, setLoading] = useState(true);
-  // Permiso de usuario interno para habilitar acciones administrativas.
+  // Habilita acciones de administracion si el usuario es interno.
   const [isInternal, setIsInternal] = useState(false);
 
-  // Carga inicial de usuario, rol y cargas.
+  // Carga inicial: valida sesion, determina rol e hidrata la lista de cargas.
   useEffect(() => {
     console.log('SUPABASE_ANON_KEY:', supabaseAnonKey);
     void loadUserAndShipments();
   }, []);
 
-  // Debounce. Evita una consulta por cada tecla que presione el usuario.
+  // Debounce de 300ms para evitar una consulta por cada caracter que escribe el usuario.
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -67,12 +68,12 @@ export default function Dashboard() {
       void searchShipment(searchQuery.trim());
     }, 300);
 
-      return () => clearTimeout(timeout);
+    return () => clearTimeout(timeout);
   }, [searchQuery]);
 
-  // Valida sesion, determina rol interno y obtiene lista de cargas visible por RLS.
+  // Valida sesion, determina rol interno y obtiene las cargas visibles para el usuario.
+  // Las politicas RLS de Supabase filtran automaticamente segun el usuario autenticado.
   const loadUserAndShipments = async () => {
-    // Manejo de errores con try/catch y validacion de sesion.
     try {
       const {
         data: { user },
@@ -83,7 +84,8 @@ export default function Dashboard() {
         router.replace('/login');
         return;
       }
-      // Consulta el perfil para determinar si el usuario es interno.
+
+      // Consultar el perfil para saber si el usuario puede ver las acciones de admin.
       const { data: profile } = await supabase
         .from('profiles')
         .select('is_internal')
@@ -91,7 +93,9 @@ export default function Dashboard() {
         .single();
 
       setIsInternal(profile?.is_internal || false);
-      // Consulta las cargas visibles para este usuario, ordenadas por fecha de creacion.
+
+      // Cargar todas las cargas visibles para este usuario segun RLS,
+      // ordenadas por fecha de creacion descendente para mostrar las mas recientes primero.
       const { data, error } = await supabase
         .from('shipments')
         .select('*')
@@ -107,7 +111,8 @@ export default function Dashboard() {
     }
   };
 
-  // Consulta por DO, origen o destino, usa ilike para ignore case, se ordena descendentemente por fecha de creación.
+  // Busqueda flexible: acepta coincidencias parciales en DO, origen o destino.
+  // ilike garantiza busqueda case-insensitive sin transformar el query en cliente.
   const searchShipment = async (cleanQuery: string) => {
     try {
       setSearching(true);
@@ -128,7 +133,7 @@ export default function Dashboard() {
     }
   };
 
-  // Cierra sesion y envia al login.
+  // Cierra la sesion de Supabase y redirige al login.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace('/login');
@@ -154,6 +159,7 @@ export default function Dashboard() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
+        {/* Titulo diferenciado segun tipo de usuario para mayor claridad contextual. */}
         <Text style={styles.headerTitle}>
           {isInternal ? 'Cargas Vigentes' : 'Sus Cargas Disponibles'}
         </Text>
@@ -163,7 +169,7 @@ export default function Dashboard() {
       </View>
 
       <View style={styles.content}>
-        {/* Barra de busqueda */}
+        {/* Barra de busqueda con debounce activo via useEffect */}
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
@@ -188,7 +194,7 @@ export default function Dashboard() {
           </View>
         )}
 
-        {/* Acciones visibles solo para usuarios internos */}
+        {/* Acciones administrativas visibles exclusivamente para usuarios internos */}
         {isInternal && (
           <View style={styles.internalActions}>
             <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/addUser')}>
@@ -215,11 +221,13 @@ export default function Dashboard() {
           </View>
         )}
 
+        {/* FAB flotante para acceder al asistente IA desde cualquier posicion de la lista */}
         <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
           <Text style={styles.fabAssistantText}>IA</Text>
         </TouchableOpacity>
 
-        {/* Lista de cargas */}
+        {/* Lista principal: muestra resultados de busqueda si hay query activo,
+            o la lista completa cargada al inicio si no hay filtro aplicado. */}
         <FlatList
           data={searchQuery.trim() ? searchResults : shipments}
           keyExtractor={(item) => item.id}
@@ -326,13 +334,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionHalf: {
-    flex: 1,
-  },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  actionHalf: { flex: 1 },
   actionButton: {
     backgroundColor: COLORS.orange,
     padding: 12,

@@ -20,7 +20,9 @@ type Platform = "expo" | "web_fcm";
 type NotifyBody = {
   event_type: EventType;
   shipment_id: string;
+  // Destinatario unico (retrocompatibilidad con integraciones anteriores).
   target_user_id?: string | null;
+  // Lista de destinatarios cuando el evento afecta a multiples usuarios.
   target_user_ids?: string[] | null;
   do_number?: string | null;
   status?: string | null;
@@ -31,10 +33,13 @@ type PushEndpoint = {
   platform: Platform;
 };
 
+// Fila de la tabla de relaciones que vincula un perfil con una carga.
 type ProfileShipmentRelation = {
   profile_id: string | null;
 };
 
+// Subconjunto del JSON de service account de Firebase necesario
+// para firmar el JWT y obtener el access_token de Google OAuth.
 type ServiceAccount = {
   project_id: string;
   private_key: string;
@@ -43,6 +48,7 @@ type ServiceAccount = {
 };
 
 async function readJsonSafe(response: Response): Promise<any> {
+  // Evita excepciones si el body de la respuesta no es JSON valido.
   try {
     return await response.json();
   } catch {
@@ -59,6 +65,8 @@ function json(status: number, payload: Record<string, unknown>) {
 }
 
 function toBase64Url(input: Uint8Array): string {
+  // Convierte bytes a base64url (reemplaza +, /, = para cumplir RFC 4648).
+  // Necesario para construir el JWT que firma Google OAuth.
   const binary = String.fromCharCode(...input);
   const base64 = btoa(binary);
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -70,6 +78,7 @@ function encodeText(input: string): Uint8Array {
 
 async function importPrivateKey(pem: string): Promise<CryptoKey> {
   // Convierte la private key PEM del service account a CryptoKey utilizable por Web Crypto.
+  // Elimina cabecera, pie y espacios del PEM antes de decodificar el DER binario.
   const sanitized = pem
     .replace("-----BEGIN PRIVATE KEY-----", "")
     .replace("-----END PRIVATE KEY-----", "")
@@ -87,6 +96,7 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
 
 async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<string> {
   // Construye y firma un JWT para intercambiarlo por un access_token OAuth de Google.
+  // Este flujo es necesario porque FCM HTTP v1 ya no acepta la Server Key legacy.
   const now = Math.floor(Date.now() / 1000);
   const jwtHeader = { alg: "RS256", typ: "JWT" };
   const jwtClaims = {
@@ -94,6 +104,7 @@ async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<str
     scope: "https://www.googleapis.com/auth/firebase.messaging",
     aud: serviceAccount.token_uri ?? "https://oauth2.googleapis.com/token",
     iat: now,
+    // Token valido por 1 hora; suficiente para el ciclo de vida de la funcion.
     exp: now + 3600,
   };
 
@@ -134,6 +145,7 @@ async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<str
 
 function buildMessage(eventType: EventType, doNumber?: string | null, status?: string | null) {
   // Normaliza el texto de notificacion segun tipo de evento.
+  // Si no hay numero de DO disponible, usa un texto generico para no exponer datos vacios.
   const doLabel = doNumber?.trim() ? doNumber : "tu carga";
   if (eventType === "assigned") {
     return {
@@ -149,6 +161,7 @@ function buildMessage(eventType: EventType, doNumber?: string | null, status?: s
         : `La carga ${doLabel} fue actualizada.`,
     };
   }
+  // Caso "deleted".
   return {
     title: "Carga eliminada",
     body: `La carga ${doLabel} fue eliminada.`,
@@ -157,6 +170,7 @@ function buildMessage(eventType: EventType, doNumber?: string | null, status?: s
 
 async function sendExpoPush(tokens: string[], title: string, body: string, link: string) {
   // Envia notificaciones a dispositivos nativos registrados con Expo token.
+  // La API de Expo acepta un batch de mensajes en un solo POST.
   if (tokens.length === 0) return [];
   const messages = tokens.map((token) => ({
     to: token,
@@ -182,6 +196,8 @@ async function sendExpoPush(tokens: string[], title: string, body: string, link:
   const payload = await readJsonSafe(response);
   const tickets = Array.isArray(payload?.data) ? payload.data : [];
 
+  // Filtra los tokens invalidos devueltos por Expo para desactivarlos en DB
+  // y evitar reintentos sobre dispositivos que ya no tienen la app instalada.
   const invalidExpoTokens = tickets
     .map((ticket: any, index: number) => ({ ticket, token: tokens[index] }))
     .filter(({ ticket }) =>
@@ -203,7 +219,10 @@ async function sendWebPush(
   serviceAccount: ServiceAccount,
 ) {
   // Envia notificaciones web via FCM HTTP v1 usando OAuth de service account.
+  // Cada token se envia en una request independiente porque FCM v1 no admite batch nativo.
   if (tokens.length === 0) return [];
+
+  // El access token se obtiene una sola vez y se reutiliza para todas las requests del lote.
   const accessToken = await getGoogleAccessToken(serviceAccount);
   const endpoint = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
 
@@ -235,6 +254,7 @@ async function sendWebPush(
 
       if (!response.ok) {
         const errorText = await response.text();
+        // FCM devuelve 400/404 para tokens expirados o de dispositivos no registrados.
         const looksInvalidToken =
           response.status === 400 ||
           response.status === 404 ||
@@ -254,6 +274,8 @@ async function deactivateInvalidTokens(
   platform: Platform,
   tokens: string[],
 ) {
+  // Marca tokens invalidos como inactivos para no intentar enviarles futuras notificaciones.
+  // Se registra last_seen_at para auditar cuándo fue detectada la invalidez del token.
   if (tokens.length === 0) return;
 
   const uniqueTokens = Array.from(new Set(tokens));
@@ -267,6 +289,7 @@ async function deactivateInvalidTokens(
     .in("token", uniqueTokens);
 
   if (error) {
+    // Error no critico: el envio ya ocurrio; solo se pierde la limpieza del token.
     console.error(`No se pudieron desactivar tokens ${platform}:`, error.message);
   }
 }
@@ -292,6 +315,7 @@ serve(async (req) => {
       return json(500, { error: "Faltan secretos de Supabase para la funcion." });
     }
 
+    // Se usa anon key para validar el JWT del usuario sin privilegios elevados.
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
     const {
       data: { user },
@@ -312,21 +336,23 @@ serve(async (req) => {
       return json(400, { error: "event_type invalido" });
     }
 
+    // Service role para consultas que requieren acceso sin restricciones de RLS.
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 3) Carga opcional de datos de shipment (para enriquecer mensaje).
+    // 3) Carga opcional de datos del shipment para enriquecer el mensaje.
+    // En eventos "deleted" la fila puede ya no existir, por eso el error no es fatal.
     const { data: shipmentRow, error: shipmentError } = await supabase
       .from("shipments")
       .select("id, do_number, current_status")
       .eq("id", body.shipment_id)
       .maybeSingle();
 
-    // En delete la fila puede no existir si ya fue borrada.
     if (shipmentError && body.event_type !== "deleted") {
       return json(400, { error: shipmentError.message });
     }
 
-    // 4) Resolucion de destinatarios: target_user_ids -> target_user_id -> relaciones DB.
+    // 4) Resolucion de destinatarios con prioridad:
+    //    target_user_ids (lista explicita) > target_user_id (unico) > relaciones en DB.
     const explicitTargetUserIds = (body.target_user_ids ?? []).filter((value): value is string =>
       typeof value === "string" && value.length > 0
     );
@@ -337,6 +363,8 @@ serve(async (req) => {
       targetUserIds = [body.target_user_id];
     }
 
+    // Si no se especificaron destinatarios explicitamente, se resuelven por
+    // la tabla de relaciones perfil-carga (todos los asignados a ese shipment).
     if (targetUserIds.length === 0) {
       const { data: relationRows, error: relationsError } = await supabase
         .from("profile_shipment")
@@ -361,7 +389,7 @@ serve(async (req) => {
       return json(200, { sent: 0, reason: "No hay destinatario para notificar" });
     }
 
-    // 5) Obtencion de endpoints push activos por usuario.
+    // 5) Obtencion de endpoints push activos filtrando tokens inactivos o expirados.
     const { data: endpoints, error: endpointsError } = await supabase
       .from("notifications")
       .select("token, platform")
@@ -377,21 +405,27 @@ serve(async (req) => {
       return json(200, { sent: 0, reason: "Usuario sin tokens activos" });
     }
 
-    // 6) Construccion de mensaje/link y envio por plataforma.
+    // 6) Construccion del texto y deep-link segun tipo de evento.
+    // El payload del body tiene prioridad sobre los datos del shipment en DB.
     const doNumber = body.do_number ?? shipmentRow?.do_number ?? null;
     const status = body.status ?? shipmentRow?.current_status ?? null;
     const message = buildMessage(body.event_type, doNumber, status);
 
+    // En eventos "deleted" no hay pantalla de detalle a donde navegar.
     const appWebUrl = (Deno.env.get("APP_WEB_URL") ?? "").replace(/\/+$/, "");
     const path = body.event_type === "deleted" ? "/" : `/shipment/${body.shipment_id}`;
     const link = appWebUrl ? `${appWebUrl}${path}` : path;
 
+    // Separar tokens por plataforma para usar el canal de envio correcto.
     const expoTokens = rows.filter((row) => row.platform === "expo").map((row) => row.token);
     const webTokens = rows.filter((row) => row.platform === "web_fcm").map((row) => row.token);
 
+    // Enviar a dispositivos nativos y limpiar tokens invalidos detectados.
     const invalidExpoTokens = await sendExpoPush(expoTokens, message.title, message.body, link);
     await deactivateInvalidTokens(supabase, "expo", invalidExpoTokens);
 
+    // El service account es opcional: si no esta configurado, se omite el envio web
+    // sin interrumpir el flujo (la app puede operar solo con Expo por ejemplo).
     if (webTokens.length > 0) {
       const serviceJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
       if (serviceJson) {
@@ -409,6 +443,7 @@ serve(async (req) => {
 
     return json(200, { sent: rows.length });
   } catch (error) {
+    // Captura errores no controlados para evitar exponer stack traces al cliente.
     return json(500, {
       error: error instanceof Error ? error.message : "Ocurrio un error inesperado",
     });

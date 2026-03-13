@@ -27,6 +27,7 @@ type Profile = {
   nickname?: string | null;
 };
 
+// Evita loguear como error cancelaciones de promesas por navegacion o recarga.
 const isAbortError = (error: unknown) =>
   error instanceof Error &&
   (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
@@ -34,8 +35,11 @@ const isAbortError = (error: unknown) =>
 export default function Profiles() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
+  // Lista completa de perfiles cargada desde la Edge Function.
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Subconjunto filtrado localmente mientras el usuario escribe.
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  // Indicador visual del filtrado en progreso.
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -43,6 +47,8 @@ export default function Profiles() {
     void loadUserAndProfiles();
   }, []);
 
+  // Debounce de 250ms para filtrar localmente sin saturar el hilo principal.
+  // Se incluye profiles como dependencia porque el filtro opera sobre ese array.
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -56,6 +62,9 @@ export default function Profiles() {
     return () => clearTimeout(timeout);
   }, [searchQuery, profiles]);
 
+  // Valida sesion y carga todos los perfiles via Edge Function.
+  // Se usa la Edge Function en lugar de consultar Supabase directo porque
+  // la tabla profiles puede tener RLS que limite la visibilidad entre usuarios.
   const loadUserAndProfiles = async () => {
     try {
       const {
@@ -105,6 +114,9 @@ export default function Profiles() {
     }
   };
 
+  // Filtra localmente sobre el array ya cargado en memoria.
+  // No requiere nueva consulta al servidor porque los perfiles son pocos
+  // y la lista completa ya esta disponible tras la carga inicial.
   const filterProfiles = () => {
     setSearching(true);
     const clean = searchQuery.trim().toLowerCase();
@@ -119,6 +131,7 @@ export default function Profiles() {
     setSearching(false);
   };
 
+  // Navegacion de retorno segura: usa back() si hay historial, reemplaza a raiz si no.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -135,10 +148,12 @@ export default function Profiles() {
     );
   }
 
+  // Si hay busqueda activa se muestran los resultados filtrados; si no, la lista completa.
   const listData = searchQuery.trim().length > 0 ? searchResults : profiles;
 
   return (
     <View style={styles.container}>
+      {/* pointerEvents="none" en el fondo para que los toques pasen a los elementos superiores */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Image
           source={require('../../visual/background.png')}
@@ -179,6 +194,8 @@ export default function Profiles() {
           data={listData}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
+            // Prioridad de label: nickname > email > texto por defecto.
+            // Garantiza que siempre haya algo legible en la tarjeta.
             const label =
               (item.nickname && item.nickname.trim()) ||
               (item.email && item.email.trim()) ||

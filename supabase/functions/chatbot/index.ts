@@ -3,36 +3,34 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js"
 import OpenAI from "https://esm.sh/openai"
 import intentsData from "./intents.json" with { type: "json" }
 
-// Lista de intents disponibles para clasificar preguntas.
 const intents = intentsData.intents
 
-// Cliente OpenAI para clasificar intents y sintetizar respuestas.
 const openai = new OpenAI({
   apiKey: Deno.env.get("OPENAI_API_KEY")
 })
-// Cliente service role para consultar tablas protegidas.
+// Cliente global con service role: el chatbot accede a datos de cualquier usuario.
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
-// ✅ CORS headers globales
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type",
 }
 
-// Normaliza texto para reglas simples (minusculas y sin acentos).
 function normalize(text: string) {
+  // Convierte texto a minusculas sin tildes para comparaciones insensibles al acento.
   return text
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
 }
 
-// Pide a la IA que genere un JSON de consulta a DB basado en la pregunta.
 async function aiDatabaseAnswer(message: string, do_number: string | null) {
+  // Pide a la IA que genere un JSON de consulta a DB basado en la pregunta.
+  // Se devuelve { query: { table, fields } } o { query: null } si no aplica.
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0,
@@ -103,8 +101,9 @@ async function aiDatabaseAnswer(message: string, do_number: string | null) {
   return completion.choices[0].message?.content.trim()
 }
 
-// Clasificador de intención usando OpenAI (devuelve nombre exacto o null).
 async function detectIntentWithOpenAI(message: string) {
+  // Clasifica la pregunta del usuario en uno de los intents predefinidos en intents.json.
+  // Devuelve el objeto del intent si hay coincidencia exacta, o null si ninguno aplica.
   const intentList = intents.map(i => i.intent).join(", ")
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
@@ -133,8 +132,10 @@ async function detectIntentWithOpenAI(message: string) {
   return intents.find(i => i.intent.toLowerCase() === intentName) || null
 }
 
-// Re-valida que el intent realmente responda la pregunta.
 async function validateIntent(message: string, intent: any): Promise<boolean> {
+  // Segunda pasada de validacion: verifica que el intent detectado realmente
+  // responda la pregunta del usuario antes de usarlo.
+  // Reduce falsos positivos del clasificador cuando el intent es ambiguo.
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0,
@@ -170,8 +171,9 @@ async function validateIntent(message: string, intent: any): Promise<boolean> {
   return answer === "si"
 }
 
-// Extrae un posible DO desde el mensaje.
 function extractDO(message: string) {
+  // Extrae el numero de DO del mensaje usando patrones comunes del dominio:
+  // prefijos X o M seguidos de digitos, o numeros de 5+ digitos sin prefijo.
   const patterns = [
     /x[- ]?\d+/i,    
     /m[- ]?\d+/i,
@@ -183,16 +185,45 @@ function extractDO(message: string) {
   for (const pattern of patterns) {
     const match = message.match(pattern)
     if (match) {
-      return match[0].toLowerCase() // ✅ fix: toLowerCase (no tolowerCase)
+      // Normalizar a minusculas para comparar contra do_number en DB.
+      return match[0].toLowerCase()
     }
   }
 
   return null
 }
 
+function inferRequestedFields(message: string): Set<string> {
+  // Mapea palabras clave del mensaje a campos de la tabla shipments.
+  // Se usa para verificar si el intent detectado cubre lo que el usuario pregunto.
+  const fieldKeywords: Record<string, string[]> = {
+    eta: ["eta", "llegada", "arribo", "cuando llega"],
+    etd: ["etd", "salida", "zarpe", "cuando sale"],
+    origin: ["origen", "sale desde", "procedencia"],
+    destination: ["destino", "hacia donde", "va a"],
+    current_status: ["estado", "status", "situacion"],
+    current_location: ["ubicacion", "donde esta", "posicion"],
+    carrier: ["naviera", "aerolinea", "carrier", "transportista"],
+    incoterm: ["incoterm"],
+    free_days: ["dias libres", "free days"],
+    documentary_cutoff: ["corte documental", "documentary cutoff"],
+  }
+
+  const normalized = normalize(message)
+  const requested = new Set<string>()
+
+  for (const [field, keywords] of Object.entries(fieldKeywords)) {
+    if (keywords.some(kw => normalized.includes(normalize(kw)))) {
+      requested.add(field)
+    }
+  }
+
+  return requested
+}
+
 serve(async (req) => {
 
-  // ✅ Manejo del preflight CORS
+  // Respuesta inmediata al preflight CORS.
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders })
   }
@@ -206,7 +237,6 @@ serve(async (req) => {
       }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // Payload esperado desde el frontend.
     const { message, do_number } = await req.json()
 
     if (!message) {
@@ -216,13 +246,15 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // 1) Detecta intent y lo valida con un segundo modelo.
+    // Detectar y validar el intent en paralelo con la extraccion del DO.
     const rawIntent = await detectIntentWithOpenAI(message)
     let intent = rawIntent && await validateIntent(message, rawIntent) ? rawIntent : null
-    // 2) Usa DO enviado o lo detecta desde el texto.
+
+    // El DO puede venir en el payload del frontend o extraerse directamente del mensaje.
     const DO = do_number?.toLowerCase() || extractDO(message)
 
-    // Si el intent no cubre los campos solicitados, degradamos al flujo genérico.
+    // Si el intent no cubre los campos que el usuario pregunta,
+    // degradar al flujo generico de consulta libre contra DB.
     const requestedFields = inferRequestedFields(message)
     if (requestedFields.size > 0 && intent) {
       const intentFields = intent.database?.fields ?? []
@@ -235,7 +267,10 @@ serve(async (req) => {
     console.error("INTENT:", intent?.intent || "null")
     console.error("DO:", DO)
 
-    // 3) siempre_escalar - corta antes que todo
+    // --- Arbol de decision del chatbot ---
+
+    // 1. Intents marcados como siempre_escalar se derivan al equipo humano
+    //    sin intentar responder automaticamente, independientemente del contexto.
     if (intent?.escalate_if?.includes("siempre_escalar")) {
       return new Response(JSON.stringify({
         mode: "handoff",
@@ -243,7 +278,8 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // 4) Sin intent y sin DO - pedimos el DO.
+    // 2. Sin intent clasificado y sin DO: no hay suficiente informacion para
+    //    responder nada concreto; se le pide al usuario su numero de DO.
     if (intent === null && !DO) {
       return new Response(JSON.stringify({
         mode: "ask_do",
@@ -251,12 +287,14 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // 5) Sin intent pero con DO - flujo IA libre contra DB.
+    // 3. Sin intent pero con DO: la IA determina libremente que campos consultar
+    //    en base a la pregunta, usando la whitelist de tablas y campos permitidos.
     if (!intent) {
       const aiResult = await aiDatabaseAnswer(message, DO)
       console.log("AI RESULT:", aiResult)
       let parsed
       try {
+        // Limpiar posibles bloques de codigo Markdown que la IA pueda incluir.
         const clean = aiResult?.replace(/```json|```/g, "").trim() || ""
         parsed = JSON.parse(clean)
       } catch (error) {
@@ -274,9 +312,10 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
-      // Tabla y campos propuestos por la IA.
       const { table, fields } = parsed.query
 
+      // Whitelist de tablas y campos permitidos para prevenir consultas arbitrarias
+      // generadas por la IA que podrian exponer datos sensibles.
       const ALLOWED_TABLES = ["shipments", "shipment_updates"]
       const ALLOWED_FIELDS: Record<string, string[]> = {
         shipments: ["do_number","eta","etd","origin","destination",
@@ -292,12 +331,11 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
-      // Filtro estricto de campos permitidos.
+      // Filtrar los campos sugeridos por la IA contra la whitelist correspondiente.
       const safeFields = fields?.filter(
         (f: string) => ALLOWED_FIELDS[table]?.includes(f)
       ) || []
 
-      // ✅ Logs después de declarar safeFields (fix: "Cannot access safeFields before initialization")
       console.log("=== AI DATABASE ANSWER ===")
       console.log("DO:", DO)
       console.log("TABLE:", table)
@@ -311,7 +349,6 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
-      // Consulta la tabla con los campos aprobados.
       const { data, error } = await supabase
         .from(table)
         .select(safeFields.join(","))
@@ -328,7 +365,8 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
-      // Redacta respuesta final usando solo datos reales.
+      // La IA genera la respuesta en lenguaje natural usando exclusivamente
+      // los datos reales devueltos por la DB, sin inventar informacion.
       const finalAnswer = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0,
@@ -356,7 +394,7 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // 6) Intent encontrado pero requires_do y no hay DO.
+    // 4. Intent detectado pero requiere DO y el usuario no lo proporciono.
     if (intent.requires_do && !DO) {
       return new Response(JSON.stringify({
         mode: "ask_do",
@@ -364,10 +402,9 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // 7) Intent encontrado - flujo normal con template.
+    // 5. Flujo normal con intent valido: consultar DB y rellenar el template de respuesta.
     let shipmentData: any = null
 
-    // Si el intent requiere DO, cargamos la carga.
     if (intent.requires_do) {
       const { data, error } = await supabase
         .from("shipments")
@@ -385,15 +422,15 @@ serve(async (req) => {
       shipmentData = data
     }
 
-    // Campos requeridos por el intent para rellenar el template.
     const requiredFields = intent.database?.fields?.filter((f: string) => f !== "do_number") || []
     let response = intent.response_template || ""
 
-    // Reemplaza placeholders y valida campos faltantes.
     if (requiredFields.length > 0 && shipmentData) {
       for (const field of requiredFields) {
         const value = shipmentData[field]
 
+        // Si un campo requerido por el template no tiene valor en DB,
+        // informar al usuario en lugar de devolver una respuesta con placeholders vacios.
         if (!value) {
           return new Response(JSON.stringify({
             mode: "missing_data",
@@ -401,6 +438,7 @@ serve(async (req) => {
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
+        // Sustituir el placeholder del template con el valor real de DB.
         response = response.replace(`{${field}}`, value)
       }
     }
@@ -415,6 +453,7 @@ serve(async (req) => {
 
     console.error("ERROR:", error)
 
+    // Captura errores no controlados para evitar exponer stack traces al cliente.
     return new Response(JSON.stringify({
       error: error.message
     }), {

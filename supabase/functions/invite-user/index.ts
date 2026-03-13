@@ -20,7 +20,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1) Validar encabezado de autorizacion.
+    // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
     const authHeader =
       req.headers.get("authorization") ?? req.headers.get("Authorization");
 
@@ -33,7 +33,9 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
-    // 2) Cliente anon para resolver usuario actual desde JWT.
+    // 2) Cliente anon para resolver el usuario desde el JWT sin privilegios elevados.
+    // Se usa anon key intencionalmente: solo necesitamos identificar al solicitante,
+    // no acceder a tablas protegidas todavia.
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -51,7 +53,7 @@ serve(async (req) => {
       });
     }
 
-    // 3) Datos de invitacion enviados por frontend.
+    // 3) Extraer datos de la invitacion enviados por el frontend.
     const { email, is_internal, nickname } = await req.json();
 
     if (!email) {
@@ -61,13 +63,15 @@ serve(async (req) => {
       });
     }
 
-    // 4) Cliente service role para acciones administrativas.
+    // 4) Cliente service role para acciones administrativas como invitar usuarios
+    // y actualizar perfiles sin restricciones de RLS.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // 5) Solo perfiles internos pueden invitar.
+    // 5) Verificar que el usuario solicitante tenga perfil interno.
+    // Solo personal interno puede crear nuevas cuentas en el sistema.
     const { data: profile, error: profileFetchError } = await supabase
       .from("profiles")
       .select("is_internal")
@@ -81,7 +85,8 @@ serve(async (req) => {
       });
     }
 
-    // 6) Invitacion por email. El trigger de BD crea el perfil base.
+    // 6) Enviar invitacion por email. Un trigger de BD crea automaticamente
+    // el perfil base al insertarse el usuario en auth.users.
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: {
         nickname: nickname || null,
@@ -98,17 +103,22 @@ serve(async (req) => {
       });
     }
 
-    // 7) Espera corta para evitar carrera antes de actualizar el perfil.
+    // 7) Espera minima para que el trigger de BD finalice antes de intentar
+    // actualizar el perfil. Sin este delay puede haber una condicion de carrera
+    // donde el perfil aun no existe al momento del UPDATE.
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // 8) Ajustar atributo interno/externo del perfil recien creado.
+    // 8) Establecer si el nuevo usuario es interno o externo.
+    // El trigger crea el perfil con valores por defecto, asi que este UPDATE
+    // es el que aplica la configuracion real segun el rol asignado en la invitacion.
     const { error: updateError } = await supabase
       .from("profiles")
       .update({ is_internal: is_internal })
       .eq("id", data.user.id);
 
     if (updateError) {
-      // No bloqueamos respuesta: el usuario ya fue invitado correctamente.
+      // Error no critico: el usuario ya fue invitado exitosamente.
+      // El perfil puede corregirse manualmente si es necesario.
       console.error("Error al actualizar perfil:", updateError);
     }
 
@@ -119,6 +129,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    // Captura errores no controlados para evitar exponer stack traces al cliente.
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Error desconocido",
