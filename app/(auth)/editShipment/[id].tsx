@@ -45,6 +45,7 @@ export default function EditShipment() {
   }, [id]);
 
   // Consulta la carga actual para poblar los campos del formulario.
+  // Consulta datos actuales de la carga en DB.
   const loadShipment = async () => {
     try {
       const { data, error } = await supabase
@@ -71,6 +72,7 @@ export default function EditShipment() {
   };
 
   // Guarda los cambios en shipments y opcionalmente agrega un registro en shipment_updates.
+  // Valida y guarda cambios. Registra observacion si aplica.
   const handleSave = async () => {
     if (!doNumber || !origin || !destination) {
       Alert.alert('Error', 'DO, origen y destino son obligatorios');
@@ -126,6 +128,7 @@ export default function EditShipment() {
     }
   };
 
+  // Modal de confirmacion para eliminar carga.
   const handleDelete = () => {
     Alert.alert('Eliminar carga', 'Esta acción no se puede deshacer. ¿Deseas continuar?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -139,6 +142,7 @@ export default function EditShipment() {
     ]);
   };
 
+  // Elimina en DB y notifica al usuario asignado.
   const confirmDelete = async () => {
     const shipmentId = String(id ?? '');
     if (!shipmentId) {

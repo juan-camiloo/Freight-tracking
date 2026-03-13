@@ -2,8 +2,10 @@
 // Encapsula la llamada a la Edge Function que dispara push por eventos de carga.
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 
+// Tipos de eventos de carga que disparan notificacion.
 export type ShipmentEventType = 'assigned' | 'updated' | 'deleted';
 
+// Payload para notificar un evento de carga.
 type NotifyShipmentEventParams = {
   eventType: ShipmentEventType;
   shipmentId: string;
@@ -13,6 +15,7 @@ type NotifyShipmentEventParams = {
   status?: string | null;
 };
 
+// Invoca la Edge Function que envia notificaciones push.
 export async function notifyShipmentEvent(params: NotifyShipmentEventParams) {
   // Recupera access token actual para autenticar la invocacion server-side.
   const { data: sessionData } = await supabase.auth.getSession();

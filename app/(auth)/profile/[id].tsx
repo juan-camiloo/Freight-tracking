@@ -30,13 +30,16 @@ const COLORS = {
 export default function ProfileDetail() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams();
+  // Datos basicos del perfil seleccionado.
   const [profile, setProfile] = useState<Profile | null>(null);
+  // Estado de carga inicial.
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void loadProfileDetails();
   }, [id]);
 
+  // Consulta el perfil desde Supabase con el ID de la ruta.
   const loadProfileDetails = async () => {
     try {
       const {
@@ -65,6 +68,7 @@ export default function ProfileDetail() {
     }
   };
 
+  // Navegacion segura al listado de perfiles.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();

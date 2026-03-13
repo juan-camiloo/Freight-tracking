@@ -10,6 +10,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
+// Datos del dispositivo actuales.
 const isDevice = Device.isDevice;
 const model = Device.modelName;
 const version = Device.osVersion;
@@ -29,6 +30,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Obtiene el projectId requerido por Expo Push.
 function getExpoProjectId(): string | undefined {
   // Expo Push requiere projectId (EAS); probamos multiples fuentes.
   const easProjectId =
@@ -39,6 +41,7 @@ function getExpoProjectId(): string | undefined {
   return easProjectId || undefined;
 }
 
+// Inserta o actualiza el token de push en la tabla notifications.
 async function upsertPushToken(params: {
   userId: string;
   platform: PushPlatform;
@@ -65,6 +68,7 @@ async function upsertPushToken(params: {
   }
 }
 
+// Registro de token Expo Push (mobile).
 async function registerExpoToken(userId: string) {
   // Flujo mobile: permisos -> token Expo -> persistencia en DB.
   // Push nativo requiere dispositivo fisico.
@@ -104,9 +108,11 @@ async function registerExpoToken(userId: string) {
   });
 }
 
+// Registro de token FCM (web).
 async function registerWebFcmToken(userId: string) {
   // Flujo web: permiso browser -> service worker -> token FCM -> persistencia en DB.
   const permission = await Notification.requestPermission();
+  // Config necesaria para inicializar Firebase en web.
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -145,6 +151,7 @@ async function registerWebFcmToken(userId: string) {
   });
   const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${swParams.toString()}`);
 
+  // Solicita el token FCM al navegador.
   const token = await getToken(messaging, {
     vapidKey,
     serviceWorkerRegistration: registration,

@@ -48,6 +48,7 @@ const WELCOME_MESSAGE: ChatMessage = {
     'Si tu consulta no es sobre un embarque específico, cuéntame tu pregunta.',
 };
 
+// Frases de ejemplo para iniciar la conversacion.
 const RECOMMENDATIONS = [
   '¿Cuál es el ETA de mi x12345?',
   '¿Dónde está mi carga x12345?',
@@ -55,8 +56,10 @@ const RECOMMENDATIONS = [
   '¿Cuál es el documentary cutoff del x12345?',
 ];
 
+// Tiempo de inactividad antes de advertir y luego cerrar el chat.
 const INACTIVITY_MS = 5 * 60 * 1000;
 
+// Extrae un posible DO desde texto libre.
 const extractDoNumber = (message: string) => {
   const patterns = [
     /x[- ]?\d+/i,    
@@ -74,18 +77,25 @@ const extractDoNumber = (message: string) => {
 
 export default function ChatAssistantScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  // Referencias para controlar timers de inactividad.
   const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Historial local (no se guarda en DB).
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  // Texto actual en el input.
   const [input, setInput] = useState('');
+  // Flag de envio para evitar doble submit.
   const [sending, setSending] = useState(false);
+  // DO detectado en la conversacion.
   const [doNumber, setDoNumber] = useState<string | null>(null);
 
+  // Se usa para ocultar recomendaciones luego del primer mensaje del usuario.
   const hasUserMessages = useMemo(
     () => messages.some((message) => message.role === 'user'),
     [messages],
   );
 
+  // Verifica que haya sesion activa; si no, vuelve al login.
   const ensureSession = async () => {
     const {
       data: { user },
@@ -97,10 +107,12 @@ export default function ChatAssistantScreen() {
     }
   };
 
+  // Agrega mensaje al historial local.
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message]);
   }, []);
 
+  // Resetea el chat y vuelve a la pantalla principal.
   const closeChat = useCallback(() => {
     setMessages([WELCOME_MESSAGE]);
     setInput('');
@@ -108,6 +120,7 @@ export default function ChatAssistantScreen() {
     router.replace('/');
   }, []);
 
+  // Reinicia timers de inactividad en cada accion del usuario.
   const markActivity = useCallback(() => {
     if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
@@ -116,7 +129,7 @@ export default function ChatAssistantScreen() {
       appendMessage({
         id: `${Date.now()}-assistant-warning`,
         role: 'assistant',
-        text: 'Â¿Sigues ahÃ­? Si no se detecta actividad en 5 minutos se procederÃ¡ a cerrar el chat.',
+        text: '¿Sigues ahí­? Si no se detecta actividad en 5 minutos se procederá a cerrar el chat.',
       });
 
       closeTimeoutRef.current = setTimeout(() => {
@@ -129,6 +142,7 @@ export default function ChatAssistantScreen() {
     void ensureSession();
   }, []);
 
+  // Inicializa y limpia timers de inactividad.
   useEffect(() => {
     markActivity();
     return () => {
@@ -144,6 +158,7 @@ export default function ChatAssistantScreen() {
     });
   }, [messages, sending]);
 
+  // Envia mensaje del usuario a la Edge Function.
   const sendMessage = async (text: string) => {
     
     const clean = text.trim();
@@ -168,9 +183,11 @@ export default function ChatAssistantScreen() {
         return;
       }
 
+      // Extrae DO del mensaje y lo mantiene en memoria.
       const extractedDo = extractDoNumber(clean);
       const resolvedDo = extractedDo || doNumber;
       if (extractedDo) setDoNumber(extractedDo);
+      // Limpiamos el DO del texto antes de enviarlo a la IA.
       const cleanMessage = clean
       .replace(/mi do es\s+\S+/gi, '')
       .replace(/\bx\d+\b/gi, '')
@@ -218,6 +235,7 @@ export default function ChatAssistantScreen() {
     }
   };
 
+  // Prellena input con una sugerencia.
   const handleSuggestionPress = (suggestion: string) => {
     markActivity();
     setInput(suggestion);

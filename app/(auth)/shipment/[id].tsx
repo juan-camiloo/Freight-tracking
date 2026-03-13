@@ -62,13 +62,19 @@ const COLORS = {
 export default function ShipmentDetail() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams();
+  // Datos principales de la carga.
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  // Historial de eventos de la carga.
   const [updates, setUpdates] = useState<ShipmentUpdate[]>([]);
+  // Documentos asociados a la carga.
   const [documents, setDocuments] = useState<Document[]>([]);
+  // Estado general de carga de la pantalla.
   const [loading, setLoading] = useState(true);
+  // Estados de acciones internas.
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [deletingShipment, setDeletingShipment] = useState(false);
+  // Flags de permisos y usuario.
   const [isInternal, setIsInternal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -76,6 +82,7 @@ export default function ShipmentDetail() {
     void loadShipmentDetails();
   }, [id]);
 
+  // Carga permisos, datos principales, historial y documentos.
   const loadShipmentDetails = async () => {
     try {
       const {
@@ -140,6 +147,7 @@ export default function ShipmentDetail() {
     }
   };
 
+  // Desactiva la carga (solo interno).
   const handleDeactive = async () => {
     setDeletingShipment(true);
     if (!isInternal) {
@@ -174,6 +182,7 @@ export default function ShipmentDetail() {
     }
   };
 
+  // Sube documento PDF a Storage y lo registra en DB.
   const handleUploadDocument = async () => {
     if (!isInternal) {
       Alert.alert(t('common.error'), t('shipmentDetail.internalUploadOnly'));
@@ -270,6 +279,7 @@ export default function ShipmentDetail() {
     }
   };
 
+  // Resuelve el path real del archivo en Storage.
   const resolveStoragePath = async (doc: Document) => {
     if (doc.file_path) return doc.file_path;
     if (doc.storage_path) return doc.storage_path;
@@ -289,6 +299,7 @@ export default function ShipmentDetail() {
     return match ? `${shipmentId}/${match.name}` : null;
   };
 
+  // Genera URL firmada y abre el documento.
   const handleOpenDocument = async (doc: Document) => {
     try {
       setOpeningDocumentId(doc.id);
@@ -321,6 +332,7 @@ export default function ShipmentDetail() {
     }
   };
 
+  // Navegacion segura al listado principal.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();

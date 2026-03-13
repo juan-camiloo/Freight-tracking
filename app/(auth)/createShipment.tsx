@@ -23,7 +23,8 @@ const COLORS = {
 };
 
 export default function CreateShipment() {
-  // Campos del formulario de creacion.
+  // Un estado por campo para mantener control granular sobre cada input
+  // y facilitar el armado del payload sin transformaciones adicionales.
   const [doNumber, setDoNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [origin, setOrigin] = useState('');
@@ -42,10 +43,10 @@ export default function CreateShipment() {
   const [observation, setObservation] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
 
-  // Controla estado visual de envio del formulario.
+  // Bloquea el boton de envio mientras la Edge Function procesa la request.
   const [saving, setSaving] = useState(false);
 
-  // Navegacion de retorno segura.
+  // Navegacion de retorno segura: usa back() si hay historial, fallback a raiz si no.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -54,7 +55,7 @@ export default function CreateShipment() {
     }
   };
 
-  // Envia datos del formulario a la funcion server-side para crear la carga.
+  // Valida campos obligatorios en cliente antes de consumir la Edge Function.
   const handleCreate = async () => {
     if (!doNumber || !origin || !destination) {
       Alert.alert('Error', 'DO, origen y destino son obligatorios');
@@ -97,6 +98,7 @@ export default function CreateShipment() {
             flight_vessel: flightVessel || null,
             container_number: containerNumber || null,
             carrier: carrier || null,
+            // Si no se proporciona owner_email, la Edge Function asigna la carga al usuario autenticado.
             owner_email: ownerEmail || null,
             observation: observation || null,
           }),
@@ -109,6 +111,8 @@ export default function CreateShipment() {
       }
 
       Alert.alert('Exito', 'Carga creada');
+      // Reemplazar en lugar de push para que el usuario no pueda volver
+      // al formulario ya enviado con el boton atras.
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
@@ -141,6 +145,7 @@ export default function CreateShipment() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
+          {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
           <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" onSubmitEditing={handleCreate} />
           <Field label="Via" value={shipmentType} onChangeText={setShipmentType} placeholder="Aereo / Maritimo" onSubmitEditing={handleCreate} />
           <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
@@ -164,6 +169,7 @@ export default function CreateShipment() {
             onSubmitEditing={handleCreate}
           />
 
+          {/* Observacion usa TextInput directo (no Field) por necesitar multiline */}
           <Text style={styles.label}>Observacion (opcional)</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
@@ -192,7 +198,8 @@ type FieldProps = {
   onSubmitEditing?: () => void;
 };
 
-// Componente reutilizable de etiqueta + input para reducir repeticion.
+// Componente reutilizable de etiqueta + input para reducir repeticion en el formulario.
+// No se extrae a un archivo separado porque solo se usa en esta pantalla.
 function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: FieldProps) {
   return (
     <>
@@ -204,22 +211,17 @@ function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: Fie
         value={value}
         onChangeText={onChangeText}
         returnKeyType="done"
-        onSubmitEditing={onSubmitEditing}
+          onSubmitEditing={onSubmitEditing}
       />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  // Clase personalizada: imagen de fondo a pantalla completa.
   background: { width: '100%', height: '100%' },
-  // Clase personalizada: contenedor raiz de pantalla.
   container: { flex: 1, backgroundColor: 'transparent' },
-  // Clase personalizada: scroll principal del formulario largo.
   scroll: { flex: 1 },
-  // Clase personalizada: area interna separada del header.
   content: { zIndex: 1, paddingBottom: 20, paddingTop: 80 },
-  // Clase personalizada: encabezado superior fijo.
   fixedHeader: {
     position: 'absolute',
     top: 0,
@@ -232,7 +234,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
-  // Clase personalizada: titulo del encabezado.
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -240,11 +241,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  // Clase personalizada: contenedor del boton volver.
   topActionContainer: { position: 'absolute', right: 16, top: 25 },
-  // Clase personalizada: texto del boton volver.
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
-  // Clase personalizada: tarjeta visual que agrupa todos los campos.
   form: {
     margin: 16,
     padding: 20,
@@ -253,9 +251,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  // Clase personalizada: etiqueta de cada campo del formulario.
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 10, color: COLORS.blueDark },
-  // Clase personalizada: input base para los campos de texto.
   input: {
     borderWidth: 1,
     borderColor: COLORS.blueMid,
@@ -265,9 +261,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cream,
     color: COLORS.blueDark,
   },
-  // Clase personalizada: variacion multilinea para observaciones.
   textArea: { height: 100, textAlignVertical: 'top' },
-  // Clase personalizada: boton principal de envio.
   button: {
     backgroundColor: COLORS.blue,
     padding: 14,
@@ -275,6 +269,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  // Clase personalizada: texto del boton principal.
   buttonText: { color: COLORS.cream, fontSize: 16, fontWeight: '700' },
-});
+}); 

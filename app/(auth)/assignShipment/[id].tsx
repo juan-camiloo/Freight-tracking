@@ -36,12 +36,17 @@ const isAbortError = (error: unknown) =>
 export default function AssignShipment() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams();
+  // Texto de busqueda para encontrar cargas.
   const [query, setQuery] = useState('');
+  // Lista de resultados retornados por la busqueda.
   const [results, setResults] = useState<ShipmentResult[]>([]);
+  // Estado visual para mostrar "buscando".
   const [searching, setSearching] = useState(false);
+  // Perfil destino al que se asigna la carga.
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
+    // Debounce de la busqueda para evitar consultar en cada tecla.
     if (!query.trim()) {
       setResults([]);
       return;
@@ -54,6 +59,7 @@ export default function AssignShipment() {
     return () => clearTimeout(timeout);
   }, [query]);
 
+  // Busca cargas por DO, origen o destino.
   const searchShipments = async (cleanQuery: string) => {
     try {
       setSearching(true);
@@ -80,6 +86,7 @@ export default function AssignShipment() {
     }
   }, [id]);
 
+  // Carga el perfil destino con el ID de la ruta.
   const getData = async () => {
     try {
       const { data: profileData, error: profileError } = await supabase
@@ -100,6 +107,7 @@ export default function AssignShipment() {
     }
   };
 
+  // Relaciona la carga con el perfil y dispara notificacion.
   const handleAssign = async (shipmentId: string) => {
     const clientId = String(id ?? '');
     if (!clientId) {
@@ -130,6 +138,7 @@ export default function AssignShipment() {
     }
   };
 
+  // Navegacion segura al perfil anterior o fallback.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();

@@ -22,11 +22,14 @@ const COLORS = {
 
 export default function AddUser() {
   const { t } = useTranslation();
+  // Datos del formulario de invitacion.
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
   const [isInternal, setIsInternal] = useState(false);
+  // Estado visual del envio.
   const [loading, setLoading] = useState(false);
 
+  // Envia invitacion usando Edge Function.
   const handleAddUser = async () => {
     if (!email) {
       Alert.alert(t('common.error'), t('addUser.missingEmail'));
@@ -74,6 +77,7 @@ export default function AddUser() {
     }
   };
 
+  // Navegacion segura hacia atras o al dashboard.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();

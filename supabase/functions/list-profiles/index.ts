@@ -15,12 +15,13 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Respuesta inmediata al preflight CORS sin procesar autenticacion.
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 1) Validar encabezado de autorizacion.
+    // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Falta el encabezado de autorizacion" }), {
@@ -29,15 +30,19 @@ serve(async (req) => {
       });
     }
 
+    // Extraer el token JWT eliminando el prefijo "Bearer ".
     const token = authHeader.replace("Bearer ", "").trim();
 
-    // 2) Cliente administrativo para validar token y consultar tablas protegidas.
+    // 2) Instanciar cliente con service role para poder consultar tablas
+    // protegidas por RLS sin restricciones de politicas de fila.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // 3) Resolver usuario autenticado a partir del JWT.
+    // 3) Validar el JWT contra Supabase Auth para obtener el usuario autenticado.
+    // Se usa el mismo cliente admin porque getUser con service role
+    // no requiere el anon key para resolver la sesion.
     const {
       data: { user },
       error: authError,
@@ -53,7 +58,8 @@ serve(async (req) => {
       });
     }
 
-    // 4) Autorizacion: solo usuarios internos pueden listar perfiles.
+    // 4) Verificar que el usuario autenticado tenga perfil interno antes de exponer
+    // datos de otros usuarios. Usuarios externos no deben acceder a esta ruta.
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("is_internal")
@@ -67,7 +73,8 @@ serve(async (req) => {
       });
     }
 
-    // 5) Consulta principal de perfiles para administracion.
+    // 5) Obtener todos los perfiles ordenados por fecha de creacion descendente
+    // para que los registros mas recientes aparezcan primero en la vista administrativa.
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("profiles")
       .select("*")
@@ -85,6 +92,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error) {
+    // Captura errores no controlados para evitar exponer stack traces al cliente.
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Ocurrio un error inesperado",
