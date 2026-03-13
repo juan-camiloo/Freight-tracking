@@ -85,6 +85,8 @@ export default function Login() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
         />
 
         <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>

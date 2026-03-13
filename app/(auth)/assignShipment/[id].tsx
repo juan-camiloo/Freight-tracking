@@ -179,6 +179,13 @@ export default function AssignShipment() {
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              const clean = query.trim();
+              if (clean) {
+                void searchShipments(clean);
+              }
+            }}
           />
 
           {searching && (

@@ -1,16 +1,16 @@
-// Pantalla de chat de soporte (actualmente comentada/desactivada).
-// Flujo principal:
-// 1) Obtiene usuario y su ultima conversacion.
-// 2) Lista historial de ai_messages.
-// 3) Envia mensaje a Edge Function `chatbot`.
-// 4) Refresca la conversacion con respuesta AI o derivacion a ticket.
+// Pantalla: chat IA
+// Objetivo:
+// - Mostrar conversacion con asistente de embarques (estado local).
+// - Enviar mensajes a la Edge Function `chat-assistant`.
+
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  FlatList,
   Image,
-  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -18,23 +18,17 @@ import {
   View,
 } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { supabase, supabaseAnonKey, supabaseUrl } from '../../lib/supabase';
+import { chatAssistantFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
 
 type ChatMessage = {
   id: string;
-  role: 'user' | 'assistant' | 'system' | 'agent';
-  content: string;
-  created_at: string;
-};
-
-type ChatFunctionResponse = {
-  conversation_id: string;
-  mode: 'ai_answer' | 'handoff';
-  answer: string;
+  role: 'assistant' | 'user';
+  text: string;
 };
 
 const COLORS = {
   blue: '#1E5F99',
+  blueMid: '#2B6AA0',
   blueDark: '#1B2A3A',
   orange: '#F28A07',
   cream: '#FFF6EC',
@@ -42,90 +36,148 @@ const COLORS = {
   textSecondary: '#6B7C8F',
   placeholder: '#8B98A6',
   border: '#D7E3EE',
+  bubbleAssistant: '#FFFFFF',
+  bubbleUser: '#1E5F99',
 };
 
-export default function ChatScreen() {
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [isInternal, setIsInternal] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
+const WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  text:
+    'Hola, soy tu asistente de embarques. ¿Tienes un número de DO? ' +
+    'Si tu consulta no es sobre un embarque específico, cuéntame tu pregunta.',
+};
 
-  useEffect(() => {
-    void bootstrap();
+const RECOMMENDATIONS = [
+  '¿Cuál es el ETA de mi x12345?',
+  '¿Dónde está mi carga x12345?',
+  '¿Cuál es el estado actual de mi embarque?',
+  '¿Cuál es el documentary cutoff del x12345?',
+];
+
+const INACTIVITY_MS = 5 * 60 * 1000;
+
+const extractDoNumber = (message: string) => {
+  const patterns = [
+    /x[- ]?\d+/i,    
+    /m[- ]?\d+/i,
+    /X[- ]?\d+/i,
+    /M[- ]?\d+/i,
+    /\b\d{5,}\b/
+  ]
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match) return match[0].toUpperCase();
+  }
+  return null;
+};
+
+export default function ChatAssistantScreen() {
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [doNumber, setDoNumber] = useState<string | null>(null);
+
+  const hasUserMessages = useMemo(
+    () => messages.some((message) => message.role === 'user'),
+    [messages],
+  );
+
+  const ensureSession = async () => {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      router.replace('/login');
+    }
+  };
+
+  const appendMessage = useCallback((message: ChatMessage) => {
+    setMessages((prev) => [...prev, message]);
   }, []);
 
-  const bootstrap = async () => {
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+  const closeChat = useCallback(() => {
+    setMessages([WELCOME_MESSAGE]);
+    setInput('');
+    setDoNumber(null);
+    router.replace('/');
+  }, []);
 
-      if (userError || !user) {
+  const markActivity = useCallback(() => {
+    if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+
+    warningTimeoutRef.current = setTimeout(() => {
+      appendMessage({
+        id: `${Date.now()}-assistant-warning`,
+        role: 'assistant',
+        text: 'Â¿Sigues ahÃ­? Si no se detecta actividad en 5 minutos se procederÃ¡ a cerrar el chat.',
+      });
+
+      closeTimeoutRef.current = setTimeout(() => {
+        closeChat();
+      }, INACTIVITY_MS);
+    }, INACTIVITY_MS);
+  }, [appendMessage, closeChat]);
+
+  useEffect(() => {
+    void ensureSession();
+  }, []);
+
+  useEffect(() => {
+    markActivity();
+    return () => {
+      if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, [markActivity]);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+  }, [messages, sending]);
+
+  const sendMessage = async (text: string) => {
+    
+    const clean = text.trim();
+    if (!clean || sending) return;
+
+    markActivity();
+    appendMessage({
+      id: `${Date.now()}-user`,
+      role: 'user',
+      text: clean,
+    });
+
+    setInput('');
+    setSending(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
         router.replace('/login');
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_internal')
-        .eq('id', user.id)
-        .single();
+      const extractedDo = extractDoNumber(clean);
+      const resolvedDo = extractedDo || doNumber;
+      if (extractedDo) setDoNumber(extractedDo);
+      const cleanMessage = clean
+      .replace(/mi do es\s+\S+/gi, '')
+      .replace(/\bx\d+\b/gi, '')
+      .replace(/\bm\d+\b/gi, '')
+      .trim();
 
-      setIsInternal(profile?.is_internal || false);
-
-      const { data: lastConversation } = await supabase
-        .from('ai_conversations')
-        .select('id')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (lastConversation?.id) {
-        setConversationId(lastConversation.id);
-        await loadMessages(lastConversation.id);
-      }
-    } catch (error) {
-      console.error('Error iniciando chat:', error);
-      Alert.alert('Error', 'No se pudo cargar el chat');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMessages = async (conversation: string) => {
-    const { data, error } = await supabase
-      .from('ai_messages')
-      .select('id, role, content, created_at')
-      .eq('conversation_id', conversation)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-    setMessages((data as ChatMessage[]) || []);
-  };
-
-  const handleSend = async () => {
-    const message = input.trim();
-    if (!message || sending) return;
-
-    setSending(true);
-
-    try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) {
-        Alert.alert('Error', 'No hay sesion activa');
-        return;
-      }
-
-      setInput('');
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/chatbot`, {
+      const response = await fetch(chatAssistantFunctionUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -133,110 +185,157 @@ export default function ChatScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          conversation_id: conversationId,
-          message,
+          message: cleanMessage,
+          do_number: resolvedDo,
         }),
       });
-
-      const payload = (await response.json()) as ChatFunctionResponse | { error?: string };
+      console.log("Status:", response.status)
 
       if (!response.ok) {
-        throw new Error('error' in payload && payload.error ? payload.error : 'No se pudo enviar el mensaje');
+        const errorText = await response.text();
+        throw new Error(errorText || 'No se pudo consultar al asistente.');
       }
 
-      if (!('conversation_id' in payload)) {
-        throw new Error('Respuesta invalida');
-      }
+      const data = await response.json();
+      const answer = typeof data?.answer === 'string' ? data.answer : 'No pude responder tu consulta.';
 
-      setConversationId(payload.conversation_id);
-      await loadMessages(payload.conversation_id);
+      appendMessage({
+        id: `${Date.now()}-assistant`,
+        role: 'assistant',
+        text: answer,
+      });
     } catch (error) {
-      console.error('Error enviando mensaje:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo enviar el mensaje');
+      appendMessage({
+        id: `${Date.now()}-assistant-error`,
+        role: 'assistant',
+        text:
+          error instanceof Error
+            ? `Hubo un problema al consultar el asistente: ${error.message}`
+            : 'Hubo un problema al consultar el asistente.',
+      });
     } finally {
       setSending(false);
     }
   };
 
+  const handleSuggestionPress = (suggestion: string) => {
+    markActivity();
+    setInput(suggestion);
+  };
+
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
-      return;
+    } else {
+      router.replace('/');
     }
-    router.replace('/');
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.orange} />
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Image source={require('../../visual/background.png')} style={styles.background} resizeMode="cover" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+    >
+      <View style={StyleSheet.absoluteFill}>
+        <Image
+          source={require('../../visual/background.png')}
+          style={styles.background}
+          resizeMode="cover"
+        />
       </View>
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Chat</Text>
-        <View style={styles.topActions}>
-          {isInternal && (
-            <TouchableOpacity onPress={() => router.push('/supportInbox' as any)}>
-              <Text style={styles.topActionText}>Tickets</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={backFunction}>
-            <Text style={styles.topActionText}>Volver</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.headerTitle}>Asistente IA</Text>
+        <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
+          <Text style={styles.topActionText}>Volver</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
-        <ScrollView style={styles.messagesWrapper} contentContainerStyle={styles.messagesContent}>
-          {messages.length === 0 ? (
-            <Text style={styles.emptyText}>Haz tu primera pregunta sobre tus cargas.</Text>
-          ) : (
-            messages.map((item) => (
-              <View
-                key={item.id}
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.chatContent}
+          renderItem={({ item }) => (
+            <View
+              style={[
+                styles.bubble,
+                item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.messageBubble,
-                  item.role === 'user' ? styles.messageUser : styles.messageAssistant,
+                  styles.bubbleText,
+                  item.role === 'user' ? styles.userText : styles.assistantText,
                 ]}
               >
-                <Text style={styles.messageText}>{item.content}</Text>
-              </View>
-            ))
+                {item.text}
+              </Text>
+            </View>
           )}
-        </ScrollView>
+          ListFooterComponent={
+            sending ? (
+              <View style={[styles.bubble, styles.assistantBubble]}>
+                <View style={styles.typingRow}>
+                  <ActivityIndicator size="small" color={COLORS.orange} />
+                  <Text style={styles.typingText}>Pensando...</Text>
+                </View>
+              </View>
+            ) : null
+          }
+        />
 
-        <View style={styles.composer}>
+        {!hasUserMessages && (
+          <View style={styles.recommendations}>
+            <Text style={styles.recommendationsTitle}>Recomendaciones</Text>
+            <View style={styles.recommendationsGrid}>
+              {RECOMMENDATIONS.map((suggestion) => (
+                <TouchableOpacity
+                  key={suggestion}
+                  style={styles.recommendationChip}
+                  onPress={() => handleSuggestionPress(suggestion)}
+                >
+                  <Text style={styles.recommendationText}>{suggestion}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
             placeholder="Escribe tu pregunta..."
             placeholderTextColor={COLORS.placeholder}
             value={input}
-            onChangeText={setInput}
-            multiline
+            onChangeText={(value) => {
+              markActivity();
+              setInput(value);
+            }}
+            onSubmitEditing={() => sendMessage(input)}
+            returnKeyType="send"
           />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={sending}>
+          <TouchableOpacity
+            style={[styles.sendButton, (!input.trim() || sending) && styles.sendButtonDisabled]}
+            onPress={() => sendMessage(input)}
+            disabled={!input.trim() || sending}
+          >
             <Text style={styles.sendButtonText}>{sending ? 'Enviando...' : 'Enviar'}</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent', paddingTop: 30 },
-  content: { flex: 1, zIndex: 1, paddingTop: 72 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  content: { flex: 1, zIndex: 1, paddingTop: 100, paddingBottom: 16 },
+  chatContent: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
   fixedHeader: {
     position: 'absolute',
     top: 0,
@@ -252,78 +351,90 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.blueDark,
+    color: '#1B2A3A',
     textAlign: 'center',
     paddingBottom: 14,
   },
-  topActions: {
-    position: 'absolute',
-    right: 16,
-    top: 25,
+  topActionContainer: { position: 'absolute', right: 16, top: 25 },
+  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  bubble: {
+    padding: 12,
+    borderRadius: 14,
+    maxWidth: '85%',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  assistantBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.bubbleAssistant,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.bubbleUser,
+    borderColor: COLORS.bubbleUser,
+  },
+  bubbleText: { fontSize: 15, lineHeight: 20 },
+  assistantText: { color: COLORS.blueDark },
+  userText: { color: COLORS.cream },
+  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  typingText: { color: COLORS.textSecondary },
+  recommendations: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.creamGlass,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  recommendationsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.blueDark,
+    marginBottom: 8,
+  },
+  recommendationsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  topActionText: { color: COLORS.blueDark, fontSize: 16, fontWeight: '600', padding: 6 },
-  messagesWrapper: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 12,
+  recommendationChip: {
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.blueMid,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  messagesContent: {
-    paddingBottom: 16,
+  recommendationText: { color: COLORS.blueDark, fontSize: 12 },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: 10,
-  },
-  emptyText: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: 28,
-  },
-  messageBubble: {
-    maxWidth: '90%',
-    borderRadius: 12,
+    marginHorizontal: 16,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: COLORS.creamGlass,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  messageUser: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#DDEEFF',
-  },
-  messageAssistant: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.creamGlass,
-  },
-  messageText: {
-    color: COLORS.blueDark,
-    fontSize: 14,
-  },
-  composer: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.cream,
-    padding: 10,
-    gap: 10,
   },
   input: {
-    minHeight: 48,
+    flex: 1,
+    minHeight: 44,
     maxHeight: 120,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: COLORS.cream,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
     color: COLORS.blueDark,
   },
   sendButton: {
-    backgroundColor: COLORS.blue,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
+    backgroundColor: COLORS.orange,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
   },
-  sendButtonText: {
-    color: COLORS.cream,
-    fontWeight: '700',
-  },
+  sendButtonDisabled: { opacity: 0.6 },
+  sendButtonText: { color: COLORS.blueDark, fontWeight: '700' },
 });

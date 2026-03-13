@@ -141,26 +141,27 @@ export default function CreateShipment() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
-          <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" />
-          <Field label="Via" value={shipmentType} onChangeText={setShipmentType} placeholder="Aereo / Maritimo" />
-          <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" />
-          <Field label="Destino *" value={destination} onChangeText={setDestination} placeholder="Ciudad, Pais" />
-          <Field label="ETD" value={etd} onChangeText={setEtd} placeholder="YYYY-MM-DD" />
-          <Field label="ETA" value={eta} onChangeText={setEta} placeholder="YYYY-MM-DD" />
-          <Field label="Incoterm" value={incoterm} onChangeText={setIncoterm} placeholder="FOB, CIF..." />
-          <Field label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} placeholder="En transito" />
-          <Field label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} placeholder="Ciudad, Pais" />
-          <Field label="Exportador" value={exporter} onChangeText={setExporter} placeholder="Empresa" />
-          <Field label="Consignatario" value={consignee} onChangeText={setConsignee} placeholder="Empresa" />
-          <Field label="Guia/Booking" value={airWaybill} onChangeText={setAirWaybill} placeholder="Numero" />
-          <Field label="Vuelo/Motonave" value={flightVessel} onChangeText={setFlightVessel} placeholder="Nombre/ID" />
-          <Field label="Contenedor" value={containerNumber} onChangeText={setContainerNumber} placeholder="CONT123" />
-          <Field label="Naviera/Aerolinea" value={carrier} onChangeText={setCarrier} placeholder="Nombre" />
+          <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" onSubmitEditing={handleCreate} />
+          <Field label="Via" value={shipmentType} onChangeText={setShipmentType} placeholder="Aereo / Maritimo" onSubmitEditing={handleCreate} />
+          <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
+          <Field label="Destino *" value={destination} onChangeText={setDestination} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
+          <Field label="ETD" value={etd} onChangeText={setEtd} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
+          <Field label="ETA" value={eta} onChangeText={setEta} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
+          <Field label="Incoterm" value={incoterm} onChangeText={setIncoterm} placeholder="FOB, CIF..." onSubmitEditing={handleCreate} />
+          <Field label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} placeholder="En transito" onSubmitEditing={handleCreate} />
+          <Field label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
+          <Field label="Exportador" value={exporter} onChangeText={setExporter} placeholder="Empresa" onSubmitEditing={handleCreate} />
+          <Field label="Consignatario" value={consignee} onChangeText={setConsignee} placeholder="Empresa" onSubmitEditing={handleCreate} />
+          <Field label="Guia/Booking" value={airWaybill} onChangeText={setAirWaybill} placeholder="Numero" onSubmitEditing={handleCreate} />
+          <Field label="Vuelo/Motonave" value={flightVessel} onChangeText={setFlightVessel} placeholder="Nombre/ID" onSubmitEditing={handleCreate} />
+          <Field label="Contenedor" value={containerNumber} onChangeText={setContainerNumber} placeholder="CONT123" onSubmitEditing={handleCreate} />
+          <Field label="Naviera/Aerolinea" value={carrier} onChangeText={setCarrier} placeholder="Nombre" onSubmitEditing={handleCreate} />
           <Field
             label="Correo del dueno de la carga"
             value={ownerEmail}
             onChangeText={setOwnerEmail}
             placeholder="usuario@email.com"
+            onSubmitEditing={handleCreate}
           />
 
           <Text style={styles.label}>Observacion (opcional)</Text>
@@ -188,10 +189,11 @@ type FieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  onSubmitEditing?: () => void;
 };
 
 // Componente reutilizable de etiqueta + input para reducir repeticion.
-function Field({ label, value, onChangeText, placeholder }: FieldProps) {
+function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: FieldProps) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
@@ -201,6 +203,8 @@ function Field({ label, value, onChangeText, placeholder }: FieldProps) {
         placeholderTextColor={COLORS.placeholder}
         value={value}
         onChangeText={onChangeText}
+        returnKeyType="done"
+        onSubmitEditing={onSubmitEditing}
       />
     </>
   );

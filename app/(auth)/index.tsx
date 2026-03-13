@@ -171,6 +171,13 @@ export default function Dashboard() {
             placeholderTextColor={COLORS.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              const clean = searchQuery.trim();
+              if (clean) {
+                void searchShipment(clean);
+              }
+            }}
           />
         </View>
 
@@ -207,6 +214,10 @@ export default function Dashboard() {
             </TouchableOpacity>
           </View>
         )}
+
+        <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
+          <Text style={styles.fabAssistantText}>IA</Text>
+        </TouchableOpacity>
 
         {/* Lista de cargas */}
         <FlatList
@@ -291,6 +302,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     gap: 10,
+  },
+  fabAssistant: {
+    position: 'absolute',
+    right: 18,
+    bottom: 24,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: COLORS.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+  },
+  fabAssistantText: {
+    color: COLORS.cream,
+    fontWeight: '800',
+    fontSize: 16,
+    letterSpacing: 0.5,
   },
   actionRow: {
     flexDirection: 'row',

@@ -163,6 +163,8 @@ export default function Profiles() {
             placeholderTextColor={COLORS.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={filterProfiles}
           />
         </View>
 

@@ -13,6 +13,13 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+// ✅ CORS headers globales
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+}
+
 function normalize(text: string) {
   return text
     .toLowerCase()
@@ -93,8 +100,6 @@ async function aiDatabaseAnswer(message: string, do_number: string | null) {
 
 async function detectIntentWithOpenAI(message: string) {
   const intentList = intents.map(i => i.intent).join(", ")
-
-
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0,
@@ -121,6 +126,7 @@ async function detectIntentWithOpenAI(message: string) {
   const intentName = completion.choices[0].message?.content.trim().toLowerCase()
   return intents.find(i => i.intent.toLowerCase() === intentName) || null
 }
+
 async function validateIntent(message: string, intent: any): Promise<boolean> {
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
@@ -158,16 +164,18 @@ async function validateIntent(message: string, intent: any): Promise<boolean> {
 }
 
 function extractDO(message: string) {
-    const patterns = [
-    /DO[- ]?\d+/i,
-    /\b\d{5,}\b/,
-    /ING[- ]?\d+/i
-    ]
+  const patterns = [
+    /x[- ]?\d+/i,    
+    /m[- ]?\d+/i,
+    /X[- ]?\d+/i,
+    /M[- ]?\d+/i,
+    /\b\d{5,}\b/
+  ]
 
   for (const pattern of patterns) {
     const match = message.match(pattern)
     if (match) {
-      return match[0].tolowerCase()
+      return match[0].toLowerCase() // ✅ fix: toLowerCase (no tolowerCase)
     }
   }
 
@@ -176,13 +184,18 @@ function extractDO(message: string) {
 
 serve(async (req) => {
 
+  // ✅ Manejo del preflight CORS
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
+
   try {
 
     if (req.method !== "POST") {
       return new Response(JSON.stringify({
         mode: "error",
         answer: "Método no permitido"
-      }), { status: 405 })
+      }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     const { message, do_number } = await req.json()
@@ -191,23 +204,22 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         mode: "error",
         answer: "No se recibió ningún mensaje."
-      }), { headers: { "Content-Type": "application/json" } })
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-  const rawIntent = await detectIntentWithOpenAI(message)
-  const intent = rawIntent && await validateIntent(message, rawIntent) ? rawIntent : null    
-  const DO = do_number?.toLowerCase() || extractDO(message)
+    const rawIntent = await detectIntentWithOpenAI(message)
+    const intent = rawIntent && await validateIntent(message, rawIntent) ? rawIntent : null
+    const DO = do_number?.toLowerCase() || extractDO(message)
 
-console.error("INTENT:", intent?.intent || "null")
-console.error("DO:", DO)
-
+    console.error("INTENT:", intent?.intent || "null")
+    console.error("DO:", DO)
 
     // 1. siempre_escalar - corta antes que todo
     if (intent?.escalate_if?.includes("siempre_escalar")) {
       return new Response(JSON.stringify({
         mode: "handoff",
         answer: "Esta consulta requiere atención de nuestro equipo. Te contactaremos pronto."
-      }), { headers: { "Content-Type": "application/json" } })
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     // 2. Sin intent y sin DO - no hay nada que hacer
@@ -215,13 +227,13 @@ console.error("DO:", DO)
       return new Response(JSON.stringify({
         mode: "ask_do",
         answer: "Para ayudarte mejor, por favor proporciona tu número de DO."
-      }), { headers: { "Content-Type": "application/json" } })
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     // 3. Sin intent pero con DO - flujo IA libre contra DB
     if (!intent) {
-      const aiResult = await aiDatabaseAnswer(message, DO) // ✅ fix: pasamos DO
-      console.log("AI RESULT:", aiResult) // ← agrega esto
+      const aiResult = await aiDatabaseAnswer(message, DO)
+      console.log("AI RESULT:", aiResult)
       let parsed
       try {
         const clean = aiResult?.replace(/```json|```/g, "").trim() || ""
@@ -231,18 +243,17 @@ console.error("DO:", DO)
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No pude entender tu consulta. Por favor reformúlala o contacta a nuestro equipo para asistencia personalizada."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       if (!parsed.query) {
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No pude encontrar información para darle respuesta a tu consulta."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       const { table, fields } = parsed.query
- 
 
       const ALLOWED_TABLES = ["shipments", "shipment_updates"]
       const ALLOWED_FIELDS: Record<string, string[]> = {
@@ -256,18 +267,25 @@ console.error("DO:", DO)
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No pude procesar esa consulta. Por favor contacta a nuestro equipo."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       const safeFields = fields?.filter(
         (f: string) => ALLOWED_FIELDS[table]?.includes(f)
       ) || []
 
+      // ✅ Logs después de declarar safeFields (fix: "Cannot access safeFields before initialization")
+      console.log("=== AI DATABASE ANSWER ===")
+      console.log("DO:", DO)
+      console.log("TABLE:", table)
+      console.log("FIELDS de la IA:", fields)
+      console.log("FIELDS después de whitelist:", safeFields)
+
       if (safeFields.length === 0) {
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No encontré campos válidos para responder esa consulta."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       const { data, error } = await supabase
@@ -275,15 +293,15 @@ console.error("DO:", DO)
         .select(safeFields.join(","))
         .eq("do_number", DO)
         .single()
-        console.log("DATA:", JSON.stringify(data))
-        console.log("ERROR:", JSON.stringify(error))
 
+      console.log("DATA:", JSON.stringify(data))
+      console.log("ERROR:", JSON.stringify(error))
 
       if (error || !data) {
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No encontré información para esa consulta."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       const finalAnswer = await openai.chat.completions.create({
@@ -310,7 +328,7 @@ console.error("DO:", DO)
       return new Response(JSON.stringify({
         mode: "answer",
         answer: finalAnswer.choices[0].message?.content.trim() || "No pude generar una respuesta a tu consulta."
-      }), { headers: { "Content-Type": "application/json" } })
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     // 4. Intent encontrado pero requires_do y no hay DO
@@ -318,7 +336,7 @@ console.error("DO:", DO)
       return new Response(JSON.stringify({
         mode: "ask_do",
         answer: "Para ayudarte necesito tu número de DO."
-      }), { headers: { "Content-Type": "application/json" } })
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     // 5. Intent encontrado - flujo normal con template
@@ -335,7 +353,7 @@ console.error("DO:", DO)
         return new Response(JSON.stringify({
           mode: "handoff",
           answer: "No pude encontrar información para ese DO. Por favor verifica el número o contacta a nuestro equipo."
-        }), { headers: { "Content-Type": "application/json" } })
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       shipmentData = data
@@ -352,7 +370,7 @@ console.error("DO:", DO)
           return new Response(JSON.stringify({
             mode: "missing_data",
             answer: "En este momento no tengo registrada esa información para tu embarque. Nuestro equipo de operaciones puede confirmarla manualmente."
-          }), { headers: { "Content-Type": "application/json" } })
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
         response = response.replace(`{${field}}`, value)
@@ -363,7 +381,7 @@ console.error("DO:", DO)
       mode: "answer",
       answer: response,
       intent: intent.intent
-    }), { headers: { "Content-Type": "application/json" } })
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   } catch (error) {
 
@@ -373,7 +391,7 @@ console.error("DO:", DO)
       error: error.message
     }), {
       status: 500,
-      headers: { "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     })
 
   }

@@ -111,6 +111,8 @@ export default function AddUser() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={handleAddUser}
           />
 
           <Text style={styles.label}>{t('addUser.nicknameLabel')}</Text>
@@ -121,6 +123,8 @@ export default function AddUser() {
             value={nickname}
             onChangeText={setNickname}
             autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={handleAddUser}
           />
 
           <View style={styles.switchContainer}>

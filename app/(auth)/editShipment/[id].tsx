@@ -222,13 +222,13 @@ export default function EditShipment() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
-          <InputField label="DO Number *" value={doNumber} onChangeText={setDoNumber} />
-          <InputField label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} />
-          <InputField label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} />
-          <InputField label="Exportador" value={exporter} onChangeText={setExporter} />
-          <InputField label="Consignatario" value={consignee} onChangeText={setConsignee} />
-          <InputField label="Origen *" value={origin} onChangeText={setOrigin} />
-          <InputField label="Destino *" value={destination} onChangeText={setDestination} />
+          <InputField label="DO Number *" value={doNumber} onChangeText={setDoNumber} onSubmitEditing={handleSave} />
+          <InputField label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} onSubmitEditing={handleSave} />
+          <InputField label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
+          <InputField label="Exportador" value={exporter} onChangeText={setExporter} onSubmitEditing={handleSave} />
+          <InputField label="Consignatario" value={consignee} onChangeText={setConsignee} onSubmitEditing={handleSave} />
+          <InputField label="Origen *" value={origin} onChangeText={setOrigin} onSubmitEditing={handleSave} />
+          <InputField label="Destino *" value={destination} onChangeText={setDestination} onSubmitEditing={handleSave} />
 
           <Text style={styles.label}>Observacion (opcional)</Text>
           <TextInput
@@ -250,14 +250,21 @@ type InputFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
+  onSubmitEditing?: () => void;
 };
 
 // Componente reutilizable para evitar repetir etiqueta + input.
-function InputField({ label, value, onChangeText }: InputFieldProps) {
+function InputField({ label, value, onChangeText, onSubmitEditing }: InputFieldProps) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <TextInput style={styles.input} value={value} onChangeText={onChangeText} />
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        returnKeyType="done"
+        onSubmitEditing={onSubmitEditing}
+      />
     </>
   );
 }
