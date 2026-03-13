@@ -11,6 +11,46 @@
     "unknown_question": "escalar_humano" },
 "intents": [
   {
+    "intent": "origen_embarque",
+    "category": "operaciones_generales",
+    "examples": [
+      "de donde sale mi carga",
+      "cual es el origen",
+      "origen de mi embarque",
+      "desde donde sale mi embarque"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "origin"]
+    },
+    "response_template": "El origen de tu embarque es {origin}.",
+    "escalate_if": [
+      "origin_null",
+      "origin_vacio"
+    ]
+  },
+  {
+    "intent": "destino_embarque",
+    "category": "operaciones_generales",
+    "examples": [
+      "cual es el destino",
+      "a donde llega mi carga",
+      "destino de mi embarque",
+      "a donde va mi embarque"
+    ],
+    "requires_do": true,
+    "database": {
+      "table": "shipments",
+      "fields": ["do_number", "destination"]
+    },
+    "response_template": "El destino de tu embarque es {destination}.",
+    "escalate_if": [
+      "destination_null",
+      "destination_vacio"
+    ]
+  },
+  {
     "intent": "factura_fecha_emision",
     "category": "administrativo",
     "examples": [

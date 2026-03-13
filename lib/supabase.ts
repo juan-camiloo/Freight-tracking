@@ -8,7 +8,7 @@ export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ
 export const createShipmentFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/create-shipment'
 export const listProfilesFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/list-profiles'
 export const notifyShipmentEventFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/notify-shipment-event'
-export const chatAssistantFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/chat-assistant'
+export const chatAssistantFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/chatbot'
 export const inviteUserFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/invite-user'
 
 const supabaseOptions = {
