@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std/http/server.ts"
+﻿import { serve } from "https://deno.land/std/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js"
 import OpenAI from "https://esm.sh/openai"
 import intentsData from "./intents.json" with { type: "json" }
@@ -28,6 +28,30 @@ function normalize(text: string) {
     .replace(/[\u0300-\u036f]/g, "")
 }
 
+function looksLikeAppHelp(message: string): boolean {
+  // Detecta preguntas sobre uso de la app para no exigir DO innecesariamente.
+  const normalized = normalize(message)
+  const keywords = [
+    "app",
+    "aplicacion",
+    "pantalla",
+    "boton",
+    "botones",
+    "menu",
+    "inicio",
+    "buscador",
+    "buscar",
+    "documento",
+    "documentos",
+    "iniciar sesion",
+    "cerrar sesion",
+    "salir",
+    "asistente",
+  ]
+
+  return keywords.some((kw) => normalized.includes(normalize(kw)))
+}
+
 async function aiDatabaseAnswer(message: string, do_number: string | null) {
   // Pide a la IA que genere un JSON de consulta a DB basado en la pregunta.
   // Se devuelve { query: { table, fields } } o { query: null } si no aplica.
@@ -38,35 +62,35 @@ async function aiDatabaseAnswer(message: string, do_number: string | null) {
       {
         role: "system",
         content: `
-        Eres un asistente virtual para una empresa de logística.
-        tienes la siguiente informacion diponible: 
+        Eres un asistente virtual para una app de cargas. Respondes solo sobre cargas y uso de la aplicacion.
+        Tienes la siguiente informacion disponible (solo sobre cargas): 
         De la tabla shipments tienes: 
           Usa estos campos SOLO cuando correspondan a la pregunta:  
-          do_number → este es el identificador principal de cada embarque, siempre que la pregunta haga referencia a un número de DO o a un embarque específico, debes usar este campo para filtrar la información.
-          shipment_type → tipo de embarque (aereo, maritimo)
-          origin → lugar desde donde sale la carga
-          destination → lugar de destino de la carga
-          eta → fecha estimada de llegada
-          etd → fecha estimada de salida
-          documentary_cutoff → fecha límite para entrega de documentos  
-          current_location → ubicación actual de la carga
-          booking_status → estado de la reserva
-          inspection_status → estado de inspección
-          free_days → días libres de contenedor
-          incoterm → incoterm del embarque
-          carrier → naviera o aerolínea
-          current_status → estado actual del embarque
-          current_location → ubicación actual del embarque
+          do_number â†’ este es el identificador principal de cada Carga, siempre que la pregunta haga referencia a un nÃºmero de DO o a un Carga especÃ­fico, debes usar este campo para filtrar la informaciÃ³n.
+          shipment_type â†’ tipo de Carga (aereo, maritimo)
+          origin â†’ lugar desde donde sale la carga
+          destination â†’ lugar de destino de la carga
+          eta â†’ fecha estimada de llegada
+          etd â†’ fecha estimada de salida
+          documentary_cutoff â†’ fecha lÃ­mite para entrega de documentos  
+          current_location â†’ ubicaciÃ³n actual de la carga
+          booking_status â†’ estado de la reserva
+          inspection_status â†’ estado de inspecciÃ³n
+          free_days â†’ dÃ­as libres de contenedor
+          incoterm â†’ incoterm del Carga
+          carrier â†’ naviera o aerolÃ­nea
+          current_status â†’ estado actual del Carga
+          current_location â†’ ubicaciÃ³n actual del Carga
         de la tabla shipment_updates tienes:
-          event_type → tipo de evento
-          status → estado actual, se actualiza con cada novedad
-          location → ubicación del embarque 
-          observation → observación del evento
+          event_type â†’ tipo de evento
+          status â†’ estado actual, se actualiza con cada novedad
+          location â†’ ubicaciÃ³n del Carga 
+          observation â†’ observaciÃ³n del evento
           created_at
 
           Nunca devuelvas un campo que no responda directamente la pregunta.
           
-        Si la pregunta puede responderse con la información de la base de datos, responde con un JSON como este:
+        Si la pregunta puede responderse con la informaciÃ³n de la base de datos, responde con un JSON como este:
           {
           "query": {
             "table": "shipments",
@@ -78,8 +102,8 @@ async function aiDatabaseAnswer(message: string, do_number: string | null) {
           1. Usa SOLO campos que respondan directamente la pregunta.
           2. Nunca inventes valores.
           3. Nunca uses un campo incorrecto (ej: no usar eta para destino).
-          4. Si el dato no responde directamente la pregunta, indícalo
-          5. Si falta información di que no está disponible
+          4. Si el dato no responde directamente la pregunta, indÃ­calo
+          5. Si falta informaciÃ³n di que no estÃ¡ disponible
           6. Si la pregunta no puede responderse con estos campos devuelve:
 
           {
@@ -114,12 +138,12 @@ async function detectIntentWithOpenAI(message: string) {
         content: `
           Clasifica el mensaje del usuario en UNA de estas intenciones: ${intentList}.  
           Reglas estrictas:
-          1. Devuelve SOLO el nombre exacto de la intención, sin explicación.
-          2. Solo usa un intent si el mensaje coincide EXACTAMENTE con su propósito.
-          3. NO uses un intent de ubicación para preguntas de origen o destino.
+          1. Devuelve SOLO el nombre exacto de la intenciÃ³n, sin explicaciÃ³n.
+          2. Solo usa un intent si el mensaje coincide EXACTAMENTE con su propÃ³sito.
+          3. NO uses un intent de ubicaciÃ³n para preguntas de origen o destino.
           4. NO uses un intent de fecha para preguntas de lugar.
           5. Si no hay un intent que responda EXACTAMENTE la pregunta, responde "ninguna".
-          6. Nunca respondas "ninguna" solo porque el usuario no dio el DO todavía.
+          6. Nunca respondas "ninguna" solo porque el usuario no dio el DO todavÃ­a.
         `
       },
       {
@@ -143,15 +167,15 @@ async function validateIntent(message: string, intent: any): Promise<boolean> {
       {
         role: "system",
         content: `
-          Eres un validador de intenciones. Tu única tarea es determinar si 
+          Eres un validador de intenciones. Tu Ãºnica tarea es determinar si 
           el intent detectado responde DIRECTAMENTE la pregunta del usuario.
           
           Responde SOLO con: "si" o "no".
           
           Responde "no" si:
           - El intent es sobre un tema diferente al de la pregunta
-          - El intent respondería una pregunta distinta a la que hizo el usuario
-          - La pregunta pide información que ese intent no cubre
+          - El intent responderÃ­a una pregunta distinta a la que hizo el usuario
+          - La pregunta pide informaciÃ³n que ese intent no cubre
         `
       },
       {
@@ -161,7 +185,7 @@ async function validateIntent(message: string, intent: any): Promise<boolean> {
           Intent detectado: "${intent.intent}"
           Ejemplos de ese intent: ${JSON.stringify(intent.examples)}
           
-          ¿Este intent responde directamente la pregunta?
+          Â¿Este intent responde directamente la pregunta?
         `
       }
     ]
@@ -233,7 +257,7 @@ serve(async (req) => {
     if (req.method !== "POST") {
       return new Response(JSON.stringify({
         mode: "error",
-        answer: "Método no permitido"
+        answer: "MÃ©todo no permitido"
       }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
@@ -242,7 +266,7 @@ serve(async (req) => {
     if (!message) {
       return new Response(JSON.stringify({
         mode: "error",
-        answer: "No se recibió ningún mensaje."
+        answer: "No se recibiÃ³ ningÃºn mensaje."
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
@@ -274,16 +298,26 @@ serve(async (req) => {
     if (intent?.escalate_if?.includes("siempre_escalar")) {
       return new Response(JSON.stringify({
         mode: "handoff",
-        answer: "Esta consulta requiere atención de nuestro equipo. Te contactaremos pronto."
+        answer: "Esta consulta requiere atenciÃ³n de nuestro equipo. Te contactaremos pronto."
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
     // 2. Sin intent clasificado y sin DO: no hay suficiente informacion para
     //    responder nada concreto; se le pide al usuario su numero de DO.
     if (intent === null && !DO) {
+      if (looksLikeAppHelp(message)) {
+        return new Response(JSON.stringify({
+          mode: "answer",
+          answer:
+            "Puedo ayudarte con el uso de la app de cargas para clientes. " +
+            "Por ejemplo: buscar cargas, ver detalle, revisar estado y fechas, " +
+            "y ver documentos asociados. Dime que necesitas.",
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      }
+
       return new Response(JSON.stringify({
         mode: "ask_do",
-        answer: "Para ayudarte mejor, por favor proporciona tu número de DO."
+        answer: "Para ayudarte mejor, por favor proporciona tu nÃºmero de DO."
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
@@ -301,14 +335,14 @@ serve(async (req) => {
         console.error("Error parsing AI response:", error, "Response was:", aiResult)
         return new Response(JSON.stringify({
           mode: "handoff",
-          answer: "No pude entender tu consulta. Por favor reformúlala o contacta a nuestro equipo para asistencia personalizada."
+          answer: "No pude entender tu consulta. Por favor reformÃºlala o contacta a nuestro equipo para asistencia personalizada."
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
       if (!parsed.query) {
         return new Response(JSON.stringify({
           mode: "handoff",
-          answer: "No pude encontrar información para darle respuesta a tu consulta."
+          answer: "No pude encontrar informaciÃ³n para darle respuesta a tu consulta."
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
@@ -340,12 +374,12 @@ serve(async (req) => {
       console.log("DO:", DO)
       console.log("TABLE:", table)
       console.log("FIELDS de la IA:", fields)
-      console.log("FIELDS después de whitelist:", safeFields)
+      console.log("FIELDS despuÃ©s de whitelist:", safeFields)
 
       if (safeFields.length === 0) {
         return new Response(JSON.stringify({
           mode: "handoff",
-          answer: "No encontré campos válidos para responder esa consulta."
+          answer: "No encontrÃ© campos vÃ¡lidos para responder esa consulta."
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
@@ -361,7 +395,7 @@ serve(async (req) => {
       if (error || !data) {
         return new Response(JSON.stringify({
           mode: "handoff",
-          answer: "No encontré información para esa consulta."
+          answer: "No encontrÃ© informaciÃ³n para esa consulta."
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
@@ -374,16 +408,16 @@ serve(async (req) => {
           {
             role: "system",
             content: `
-            Eres un asistente virtual para una empresa de logística. Respondes a las preguntas utilizando exclusivamente
-            la información que te proporciono a continuación, sin hacer suposiciones ni agregar información adicional. 
-            Si la información no es suficiente para responder a la pregunta, indícalo claramente. Tu modelo de respuesta 
+            Eres un asistente virtual para una app de cargas. Respondes solo sobre cargas y uso de la aplicacion. Respondes a las preguntas utilizando exclusivamente
+            la informaciÃ³n que te proporciono a continuaciÃ³n, sin hacer suposiciones ni agregar informaciÃ³n adicional. 
+            Si la informaciÃ³n no es suficiente para responder a la pregunta, indÃ­calo claramente. Tu modelo de respuesta 
             debe ser con un tono amable, profesional, directo, conciso y servicial.`
           },
           {
             role: "user",
             content: `
             Pregunta del usuario: ${message} 
-            Información disponible: ${JSON.stringify(data)}`
+            InformaciÃ³n disponible: ${JSON.stringify(data)}`
           }
         ]
       })
@@ -398,7 +432,7 @@ serve(async (req) => {
     if (intent.requires_do && !DO) {
       return new Response(JSON.stringify({
         mode: "ask_do",
-        answer: "Para ayudarte necesito tu número de DO."
+        answer: "Para ayudarte necesito tu nÃºmero de DO."
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
@@ -415,7 +449,7 @@ serve(async (req) => {
       if (error || !data) {
         return new Response(JSON.stringify({
           mode: "handoff",
-          answer: "No pude encontrar información para ese DO. Por favor verifica el número o contacta a nuestro equipo."
+          answer: "No pude encontrar informaciÃ³n para ese DO. Por favor verifica el nÃºmero o contacta a nuestro equipo."
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
       }
 
@@ -434,7 +468,7 @@ serve(async (req) => {
         if (!value) {
           return new Response(JSON.stringify({
             mode: "missing_data",
-            answer: "En este momento no tengo registrada esa información para tu embarque. Nuestro equipo de operaciones puede confirmarla manualmente."
+            answer: "En este momento no tengo registrada esa informacion para tu carga. Nuestro equipo de operaciones puede confirmarla manualmente."
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
@@ -464,3 +498,4 @@ serve(async (req) => {
   }
 
 })
+

@@ -30,12 +30,27 @@ export default function EditShipment() {
 
   // Campos editables del formulario.
   const [doNumber, setDoNumber] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [shipmentType, setShipmentType] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
   const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
   const [consignee, setConsignee] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
+  const [etd, setEtd] = useState('');
+  const [eta, setEta] = useState('');
+  const [documentaryCutoff, setDocumentaryCutoff] = useState('');
+  const [incoterm, setIncoterm] = useState('');
+  const [cargoType, setCargoType] = useState('');
+  const [freeDays, setFreeDays] = useState('');
+  const [bookingStatus, setBookingStatus] = useState('');
+  const [inspectionStatus, setInspectionStatus] = useState('');
+  const [recordStatus, setRecordStatus] = useState('');
+  const [airWaybill, setAirWaybill] = useState('');
+  const [flightVessel, setFlightVessel] = useState('');
+  const [containerNumber, setContainerNumber] = useState('');
+  const [carrier, setCarrier] = useState('');
   const [observation, setObservation] = useState('');
   const [clientId, setClientId] = useState('');
 
@@ -57,12 +72,27 @@ export default function EditShipment() {
       if (error) throw error;
 
       setDoNumber(data.do_number || '');
+      setTrackingNumber(data.tracking_number || '');
+      setShipmentType(data.shipment_type || '');
       setCurrentStatus(data.current_status || '');
       setCurrentLocation(data.current_location || '');
       setExporter(data.exporter || '');
       setConsignee(data.consignee || '');
       setOrigin(data.origin || '');
       setDestination(data.destination || '');
+      setEtd(data.etd || '');
+      setEta(data.eta || '');
+      setDocumentaryCutoff(data.documentary_cutoff || '');
+      setIncoterm(data.incoterm || '');
+      setCargoType(data.cargo_type || '');
+      setFreeDays(data.free_days !== null && data.free_days !== undefined ? String(data.free_days) : '');
+      setBookingStatus(data.booking_status || '');
+      setInspectionStatus(data.inspection_status || '');
+      setRecordStatus(data.status || '');
+      setAirWaybill(data.air_waybill || '');
+      setFlightVessel(data.flight_vessel || '');
+      setContainerNumber(data.container_number || '');
+      setCarrier(data.carrier || '');
       setClientId(data.client_id || '');
     } catch {
       Alert.alert('Error', 'No se pudo cargar la carga');
@@ -79,6 +109,11 @@ export default function EditShipment() {
       return;
     }
 
+    if (freeDays && Number.isNaN(Number(freeDays))) {
+      Alert.alert('Error', 'Free days debe ser un numero');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -86,12 +121,27 @@ export default function EditShipment() {
         .from('shipments')
         .update({
           do_number: doNumber,
+          tracking_number: trackingNumber || null,
+          shipment_type: shipmentType || null,
           current_status: currentStatus,
           current_location: currentLocation,
           exporter,
           consignee,
           origin,
           destination,
+          etd: etd || null,
+          eta: eta || null,
+          documentary_cutoff: documentaryCutoff || null,
+          incoterm: incoterm || null,
+          cargo_type: cargoType || null,
+          free_days: freeDays ? Number(freeDays) : null,
+          booking_status: bookingStatus || null,
+          inspection_status: inspectionStatus || null,
+          status: recordStatus || null,
+          air_waybill: airWaybill || null,
+          flight_vessel: flightVessel || null,
+          container_number: containerNumber || null,
+          carrier: carrier || null,
         })
         .eq('id', id);
 
@@ -214,7 +264,7 @@ export default function EditShipment() {
             <Text style={styles.topActionText}>Volver</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleDelete} disabled={saving}>
-            <Text style={[styles.topActionText, styles.deleteText, saving && styles.disabled]}>Eliminar</Text>
+            <Text style={[styles.topActionText, styles.deleteText, saving && styles.disabled]}>Eliminar carga</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSave} disabled={saving}>
             <Text style={[styles.topActionText, saving && styles.disabled]}>
@@ -227,12 +277,27 @@ export default function EditShipment() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
           <InputField label="DO Number *" value={doNumber} onChangeText={setDoNumber} onSubmitEditing={handleSave} />
+          <InputField label="Tracking Number" value={trackingNumber} onChangeText={setTrackingNumber} onSubmitEditing={handleSave} />
+          <InputField label="Via" value={shipmentType} onChangeText={setShipmentType} onSubmitEditing={handleSave} />
           <InputField label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} onSubmitEditing={handleSave} />
           <InputField label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
           <InputField label="Exportador" value={exporter} onChangeText={setExporter} onSubmitEditing={handleSave} />
           <InputField label="Consignatario" value={consignee} onChangeText={setConsignee} onSubmitEditing={handleSave} />
           <InputField label="Origen *" value={origin} onChangeText={setOrigin} onSubmitEditing={handleSave} />
           <InputField label="Destino *" value={destination} onChangeText={setDestination} onSubmitEditing={handleSave} />
+          <InputField label="ETD" value={etd} onChangeText={setEtd} onSubmitEditing={handleSave} />
+          <InputField label="ETA" value={eta} onChangeText={setEta} onSubmitEditing={handleSave} />
+          <InputField label="Documentary Cutoff" value={documentaryCutoff} onChangeText={setDocumentaryCutoff} onSubmitEditing={handleSave} />
+          <InputField label="Incoterm" value={incoterm} onChangeText={setIncoterm} onSubmitEditing={handleSave} />
+          <InputField label="Cargo Type" value={cargoType} onChangeText={setCargoType} onSubmitEditing={handleSave} />
+          <InputField label="Free Days" value={freeDays} onChangeText={setFreeDays} onSubmitEditing={handleSave} />
+          <InputField label="Booking Status" value={bookingStatus} onChangeText={setBookingStatus} onSubmitEditing={handleSave} />
+          <InputField label="Inspection Status" value={inspectionStatus} onChangeText={setInspectionStatus} onSubmitEditing={handleSave} />
+          <InputField label="Estado del Registro" value={recordStatus} onChangeText={setRecordStatus} onSubmitEditing={handleSave} />
+          <InputField label="Guia/Booking" value={airWaybill} onChangeText={setAirWaybill} onSubmitEditing={handleSave} />
+          <InputField label="Vuelo/Motonave" value={flightVessel} onChangeText={setFlightVessel} onSubmitEditing={handleSave} />
+          <InputField label="Contenedor" value={containerNumber} onChangeText={setContainerNumber} onSubmitEditing={handleSave} />
+          <InputField label="Naviera/Aerolinea" value={carrier} onChangeText={setCarrier} onSubmitEditing={handleSave} />
 
           <Text style={styles.label}>Observacion (opcional)</Text>
           <TextInput

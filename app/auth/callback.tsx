@@ -78,7 +78,7 @@ export default function AuthCallback() {
         const type = typeParam ?? (qp.type ? String(qp.type) : null);
 
         if (token_hash && type) {
-          const normalizedType = type === 'magiclink' ? 'email' : type;
+          const normalizedType = type;
           const { error } = await supabase.auth.verifyOtp({ token_hash, type: normalizedType as any });
           if (!error) {
             const {

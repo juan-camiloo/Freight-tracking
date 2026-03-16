@@ -12,11 +12,13 @@ import { supabase } from '../../../lib/supabase';
 type Shipment = {
   id: string;
   do_number: string;
+  tracking_number?: string | null;
   shipment_type: string;
   origin: string;
   destination: string;
   etd: string | null;
   eta: string | null;
+  documentary_cutoff?: string | null;
   incoterm?: string;
   current_status?: string;
   current_location?: string;
@@ -26,6 +28,11 @@ type Shipment = {
   flight_vessel?: string;
   container_number?: string;
   carrier?: string;
+  status?: string | null;
+  booking_status?: string | null;
+  inspection_status?: string | null;
+  free_days?: number | null;
+  cargo_type?: string | null;
   client_id?: string;
 };
 
@@ -116,9 +123,9 @@ export default function ShipmentDetail() {
 
       const { data: relationData } = await supabase
         .from('profile_shipment')
-        .select('profile_id')
+        .select('client_id')
         .eq('shipment_id', id)
-        .eq('profile_id', user.id)
+        .eq('client_id', user.id)
         .maybeSingle();
 
       const assignedToUser = Boolean(relationData);
@@ -361,6 +368,12 @@ export default function ShipmentDetail() {
     Boolean(update.status || update.location || update.observation),
   );
 
+  const documentaryCutoff = shipment.documentary_cutoff
+    ? Number.isNaN(Date.parse(shipment.documentary_cutoff))
+      ? shipment.documentary_cutoff
+      : new Date(shipment.documentary_cutoff).toLocaleString()
+    : '';
+
   return (
     <View style={styles.container}>
       <View style={StyleSheet.absoluteFill}>
@@ -379,9 +392,22 @@ export default function ShipmentDetail() {
             <Text style={styles.topActionText}>{t('common.back')}</Text>
           </TouchableOpacity>
           {isInternal && (
-            <TouchableOpacity onPress={() => router.push(`/editShipment/${id}`)}>
-              <Text style={styles.topActionText}>{t('shipmentDetail.edit')}</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity onPress={() => router.push(`/editShipment/${id}`)}>
+                <Text style={styles.topActionText}>{t('shipmentDetail.edit')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDeactive} disabled={deletingShipment}>
+                <Text
+                  style={[
+                    styles.topActionText,
+                    styles.deleteText,
+                    deletingShipment && styles.disabledText,
+                  ]}
+                >
+                  {deletingShipment ? t('shipmentDetail.deleting') : t('shipmentDetail.deleteShipment')}
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
@@ -390,12 +416,29 @@ export default function ShipmentDetail() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionInfo')}</Text>
           <InfoRow label={t('shipmentDetail.labels.doNumber')} value={shipment.do_number} />
+          {shipment.tracking_number && (
+            <InfoRow label={t('shipmentDetail.labels.trackingNumber')} value={shipment.tracking_number} />
+          )}
           <InfoRow label={t('shipmentDetail.labels.via')} value={shipment.shipment_type} />
           <InfoRow label={t('shipmentDetail.labels.origin')} value={shipment.origin} />
           <InfoRow label={t('shipmentDetail.labels.destination')} value={shipment.destination} />
           <InfoRow label={t('shipmentDetail.labels.etd')} value={shipment.etd || ''} />
           <InfoRow label={t('shipmentDetail.labels.eta')} value={shipment.eta || ''} />
+          {documentaryCutoff && (
+            <InfoRow label={t('shipmentDetail.labels.documentaryCutoff')} value={documentaryCutoff} />
+          )}
           {shipment.incoterm && <InfoRow label={t('shipmentDetail.labels.incoterm')} value={shipment.incoterm} />}
+          {shipment.cargo_type && <InfoRow label={t('shipmentDetail.labels.cargoType')} value={shipment.cargo_type} />}
+          {shipment.free_days !== null && shipment.free_days !== undefined && (
+            <InfoRow label={t('shipmentDetail.labels.freeDays')} value={String(shipment.free_days)} />
+          )}
+          {shipment.booking_status && (
+            <InfoRow label={t('shipmentDetail.labels.bookingStatus')} value={shipment.booking_status} />
+          )}
+          {shipment.inspection_status && (
+            <InfoRow label={t('shipmentDetail.labels.inspectionStatus')} value={shipment.inspection_status} />
+          )}
+          {shipment.status && <InfoRow label={t('shipmentDetail.labels.recordStatus')} value={shipment.status} />}
           <InfoRow label={t('shipmentDetail.labels.status')} value={shipment.current_status || ''} />
           <InfoRow label={t('shipmentDetail.labels.location')} value={shipment.current_location || ''} />
           <InfoRow label={t('shipmentDetail.labels.exporter')} value={shipment.exporter || ''} />
@@ -449,18 +492,6 @@ export default function ShipmentDetail() {
               >
                 <Text style={styles.uploadButtonText}>
                   {uploadingDocument ? t('shipmentDetail.uploading') : t('shipmentDetail.uploadDocument')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.section2}>
-              <TouchableOpacity
-                style={[styles.deleteButton, deletingShipment && styles.uploadButtonDisabled]}
-                onPress={handleDeactive}
-                disabled={deletingShipment}
-              >
-                <Text style={styles.uploadButtonText}>
-                  {deletingShipment ? t('shipmentDetail.deleting') : t('shipmentDetail.deleteShipment')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -525,12 +556,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 8,
   },
-  section2: {
-    backgroundColor: '#fff',
-    margin: 10,
-    padding: 15,
-    borderRadius: 8,
-  },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
   infoRow: {
     flexDirection: 'row',
@@ -564,12 +589,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  deleteButton: {
-    backgroundColor: '#E53935',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
   uploadButtonDisabled: {
     opacity: 0.6,
   },
@@ -577,4 +596,6 @@ const styles = StyleSheet.create({
     color: COLORS.cream,
     fontWeight: '700',
   },
+  deleteText: { color: '#9F1D20' },
+  disabledText: { opacity: 0.6 },
 });

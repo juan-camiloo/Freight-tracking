@@ -44,6 +44,9 @@ export default function AssignShipment() {
   const [searching, setSearching] = useState(false);
   // Perfil destino al que se asigna la carga.
   const [profile, setProfile] = useState<any>(null);
+  // Estado de asignacion por carga.
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignedShipmentIds, setAssignedShipmentIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Debounce de la busqueda para evitar consultar en cada tecla.
@@ -83,6 +86,7 @@ export default function AssignShipment() {
   useEffect(() => {
     if (id) {
       void getData();
+      void loadAssignedShipments();
     }
   }, [id]);
 
@@ -107,6 +111,26 @@ export default function AssignShipment() {
     }
   };
 
+  // Carga las cargas ya asignadas a este perfil para marcar estado.
+  const loadAssignedShipments = async () => {
+    const clientId = String(id ?? '');
+    if (!clientId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profile_shipment')
+        .select('shipment_id')
+        .eq('client_id', clientId);
+
+      if (error) throw error;
+      const ids = new Set((data ?? []).map((row: { shipment_id: string }) => row.shipment_id));
+      setAssignedShipmentIds(ids);
+    } catch (error) {
+      if (isAbortError(error)) return;
+      console.error('Error cargando asignaciones:', error);
+    }
+  };
+
   // Relaciona la carga con el perfil y dispara notificacion.
   const handleAssign = async (shipmentId: string) => {
     const clientId = String(id ?? '');
@@ -116,11 +140,14 @@ export default function AssignShipment() {
     }
 
     try {
+      setAssigningId(shipmentId);
       const { error } = await supabase
         .from('profile_shipment')
-        .upsert({ profile_id: clientId, shipment_id: shipmentId }, { onConflict: 'shipment_id' });
+        .upsert({ client_id: clientId, shipment_id: shipmentId }, { onConflict: 'client_id,shipment_id' });
 
       if (error) throw error;
+
+      setAssignedShipmentIds((prev) => new Set(prev).add(shipmentId));
 
       await notifyShipmentEvent({
         eventType: 'assigned',
@@ -135,6 +162,8 @@ export default function AssignShipment() {
     } catch (error) {
       console.error('Error asignando carga:', error);
       Alert.alert(t('common.error'), t('assignShipment.assignError'));
+    } finally {
+      setAssigningId(null);
     }
   };
 
@@ -215,8 +244,21 @@ export default function AssignShipment() {
                 <Text style={styles.resultSub}>{item.origin} {'->'} {item.destination}</Text>
                 {item.current_status ? <Text style={styles.resultStatus}>{item.current_status}</Text> : null}
               </View>
-              <TouchableOpacity style={styles.resultButton} onPress={() => handleAssign(item.id)}>
-                <Text style={styles.resultButtonText}>{t('assignShipment.assign')}</Text>
+              <TouchableOpacity
+                style={[
+                  styles.resultButton,
+                  (assigningId === item.id || assignedShipmentIds.has(item.id)) && styles.resultButtonDisabled,
+                ]}
+                onPress={() => handleAssign(item.id)}
+                disabled={assigningId === item.id || assignedShipmentIds.has(item.id)}
+              >
+                <Text style={styles.resultButtonText}>
+                  {assigningId === item.id
+                    ? t('assignShipment.assigning')
+                    : assignedShipmentIds.has(item.id)
+                      ? t('assignShipment.assigned')
+                      : t('assignShipment.assign')}
+                </Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -296,6 +338,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  resultButtonDisabled: {
+    opacity: 0.6,
   },
   email: { fontSize: 14, color: '#525f6e', marginBottom: 16, marginTop: -15 },
   resultButtonText: { color: COLORS.cream, fontWeight: '700' },

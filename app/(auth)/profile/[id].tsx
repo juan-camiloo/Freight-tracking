@@ -30,6 +30,7 @@ const COLORS = {
 export default function ProfileDetail() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams();
+  const profileId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
   // Datos basicos del perfil seleccionado.
   const [profile, setProfile] = useState<Profile | null>(null);
   // Estado de carga inicial.
@@ -110,8 +111,13 @@ export default function ProfileDetail() {
           <TouchableOpacity onPress={backFunction}>
             <Text style={styles.topActionText}>{t('common.back')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push(`/assignShipment/${id}`)}>
-            <Text style={styles.topActionText}>{t('profileDetail.assignShipment')}</Text>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/assignShipment/[id]', params: { id: profileId } })}
+            disabled={!profileId}
+          >
+            <Text style={[styles.topActionText, !profileId && styles.disabledText]}>
+              {t('profileDetail.assignShipment')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -175,6 +181,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  disabledText: { opacity: 0.5 },
   section: {
     backgroundColor: '#fff',
     margin: 10,

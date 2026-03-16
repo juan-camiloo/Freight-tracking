@@ -35,7 +35,7 @@ type PushEndpoint = {
 
 // Fila de la tabla de relaciones que vincula un perfil con una carga.
 type ProfileShipmentRelation = {
-  profile_id: string | null;
+  client_id: string | null;
 };
 
 // Subconjunto del JSON de service account de Firebase necesario
@@ -368,7 +368,7 @@ serve(async (req) => {
     if (targetUserIds.length === 0) {
       const { data: relationRows, error: relationsError } = await supabase
         .from("profile_shipment")
-        .select("profile_id")
+        .select("client_id")
         .eq("shipment_id", body.shipment_id);
 
       if (relationsError && body.event_type !== "deleted") {
@@ -379,7 +379,7 @@ serve(async (req) => {
       targetUserIds = Array.from(
         new Set(
           relations
-            .map((row) => row.profile_id)
+            .map((row) => row.client_id)
             .filter((value): value is string => typeof value === "string" && value.length > 0),
         ),
       );

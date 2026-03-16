@@ -197,15 +197,15 @@ export default function Dashboard() {
         {/* Acciones administrativas visibles exclusivamente para usuarios internos */}
         {isInternal && (
           <View style={styles.internalActions}>
-            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/addUser')}>
-              <Text style={styles.actionButtonText}>+ Agregar Usuario</Text>
+            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/createShipment')}>
+              <Text style={styles.actionButtonText}>+ Crear Carga</Text>
             </TouchableOpacity>
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionButtonAlt, styles.actionHalf]}
-                onPress={() => router.push('/createShipment')}
+                onPress={() => router.push('/addUser')}
               >
-                <Text style={styles.actionButtonAltText}>+ Crear Carga</Text>
+                <Text style={styles.actionButtonAltText}>+ Agregar Usuario</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -215,16 +215,19 @@ export default function Dashboard() {
                 <Text style={styles.actionButtonAltText}>Ver Perfiles</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/supportInbox' as any)}>
-              <Text style={styles.actionButtonText}>Bandeja Soporte</Text>
-            </TouchableOpacity>
           </View>
         )}
 
-        {/* FAB flotante para acceder al asistente IA desde cualquier posicion de la lista */}
-        <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
-          <Text style={styles.fabAssistantText}>IA</Text>
-        </TouchableOpacity>
+        {/* FAB flotante: IA para externos, Bandeja Soporte para internos */}
+        {isInternal ? (
+          <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/supportInbox' as any)}>
+            <Text style={styles.fabAssistantText}>Tickets</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
+            <Text style={styles.fabAssistantText}>Asistente</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Lista principal: muestra resultados de busqueda si hay query activo,
             o la lista completa cargada al inicio si no hay filtro aplicado. */}
@@ -313,11 +316,11 @@ const styles = StyleSheet.create({
   },
   fabAssistant: {
     position: 'absolute',
-    right: 18,
-    bottom: 24,
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    right: 35,
+    bottom: 15,
+    width: 100,
+    height: 45, 
+    borderRadius: 10,
     backgroundColor: COLORS.blue,
     alignItems: 'center',
     justifyContent: 'center',
@@ -330,9 +333,8 @@ const styles = StyleSheet.create({
   },
   fabAssistantText: {
     color: COLORS.cream,
-    fontWeight: '800',
-    fontSize: 16,
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    left: 2,
   },
   actionRow: { flexDirection: 'row', gap: 10 },
   actionHalf: { flex: 1 },

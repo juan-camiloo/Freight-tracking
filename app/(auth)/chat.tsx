@@ -1,10 +1,11 @@
-// Pantalla: chat IA
+﻿// Pantalla: chat IA
 // Objetivo:
-// - Mostrar conversacion con asistente de embarques (estado local).
+// - Mostrar conversacion con asistente de cargas (estado local).
 // - Enviar mensajes a la Edge Function `chat-assistant`.
 
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -40,22 +41,6 @@ const COLORS = {
   bubbleUser: '#1E5F99',
 };
 
-const WELCOME_MESSAGE: ChatMessage = {
-  id: 'welcome',
-  role: 'assistant',
-  text:
-    'Hola, soy tu asistente de embarques. ¿Tienes un número de DO? ' +
-    'Si tu consulta no es sobre un embarque específico, cuéntame tu pregunta.',
-};
-
-// Frases de ejemplo para iniciar la conversacion.
-const RECOMMENDATIONS = [
-  '¿Cuál es el ETA de mi x12345?',
-  '¿Dónde está mi carga x12345?',
-  '¿Cuál es el estado actual de mi embarque?',
-  '¿Cuál es el documentary cutoff del x12345?',
-];
-
 // Tiempo de inactividad antes de advertir y luego cerrar el chat.
 const INACTIVITY_MS = 5 * 60 * 1000;
 
@@ -76,12 +61,30 @@ const extractDoNumber = (message: string) => {
 };
 
 export default function ChatAssistantScreen() {
+  const { t } = useTranslation();
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const welcomeMessage = useMemo<ChatMessage>(
+    () => ({
+      id: 'welcome',
+      role: 'assistant',
+      text: t('chat.welcome'),
+    }),
+    [t],
+  );
+  const recommendations = useMemo(
+    () => [
+      t('chat.recommendationEta'),
+      t('chat.recommendationWhere'),
+      t('chat.recommendationStatus'),
+      t('chat.recommendationCutoff'),
+    ],
+    [t],
+  );
   // Referencias para controlar timers de inactividad.
   const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Historial local (no se guarda en DB).
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   // Texto actual en el input.
   const [input, setInput] = useState('');
   // Flag de envio para evitar doble submit.
@@ -114,11 +117,11 @@ export default function ChatAssistantScreen() {
 
   // Resetea el chat y vuelve a la pantalla principal.
   const closeChat = useCallback(() => {
-    setMessages([WELCOME_MESSAGE]);
+    setMessages([welcomeMessage]);
     setInput('');
     setDoNumber(null);
     router.replace('/');
-  }, []);
+  }, [welcomeMessage]);
 
   // Reinicia timers de inactividad en cada accion del usuario.
   const markActivity = useCallback(() => {
@@ -129,7 +132,7 @@ export default function ChatAssistantScreen() {
       appendMessage({
         id: `${Date.now()}-assistant-warning`,
         role: 'assistant',
-        text: '¿Sigues ahí­? Si no se detecta actividad en 5 minutos se procederá a cerrar el chat.',
+        text: t('chat.inactivityWarning'),
       });
 
       closeTimeoutRef.current = setTimeout(() => {
@@ -265,7 +268,7 @@ export default function ChatAssistantScreen() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Asistente IA</Text>
+        <Text style={styles.headerTitle}>{t('chat.headerTitle')}</Text>
         <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
           <Text style={styles.topActionText}>Volver</Text>
         </TouchableOpacity>
@@ -299,7 +302,7 @@ export default function ChatAssistantScreen() {
               <View style={[styles.bubble, styles.assistantBubble]}>
                 <View style={styles.typingRow}>
                   <ActivityIndicator size="small" color={COLORS.orange} />
-                  <Text style={styles.typingText}>Pensando...</Text>
+                  <Text style={styles.typingText}>{t('chat.typing')}</Text>
                 </View>
               </View>
             ) : null
@@ -308,9 +311,9 @@ export default function ChatAssistantScreen() {
 
         {!hasUserMessages && (
           <View style={styles.recommendations}>
-            <Text style={styles.recommendationsTitle}>Recomendaciones</Text>
+            <Text style={styles.recommendationsTitle}>{t('chat.recommendationsTitle')}</Text>
             <View style={styles.recommendationsGrid}>
-              {RECOMMENDATIONS.map((suggestion) => (
+              {recommendations.map((suggestion) => (
                 <TouchableOpacity
                   key={suggestion}
                   style={styles.recommendationChip}
@@ -326,7 +329,7 @@ export default function ChatAssistantScreen() {
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
-            placeholder="Escribe tu pregunta..."
+            placeholder={t('chat.placeholder')}
             placeholderTextColor={COLORS.placeholder}
             value={input}
             onChangeText={(value) => {
@@ -341,7 +344,7 @@ export default function ChatAssistantScreen() {
             onPress={() => sendMessage(input)}
             disabled={!input.trim() || sending}
           >
-            <Text style={styles.sendButtonText}>{sending ? 'Enviando...' : 'Enviar'}</Text>
+            <Text style={styles.sendButtonText}>{sending ? t('chat.sending') : t('chat.send')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -456,3 +459,4 @@ const styles = StyleSheet.create({
   sendButtonDisabled: { opacity: 0.6 },
   sendButtonText: { color: COLORS.blueDark, fontWeight: '700' },
 });
+

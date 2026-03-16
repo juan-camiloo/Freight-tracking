@@ -26,12 +26,19 @@ export default function CreateShipment() {
   // Un estado por campo para mantener control granular sobre cada input
   // y facilitar el armado del payload sin transformaciones adicionales.
   const [doNumber, setDoNumber] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [etd, setEtd] = useState('');
   const [eta, setEta] = useState('');
+  const [documentaryCutoff, setDocumentaryCutoff] = useState('');
   const [incoterm, setIncoterm] = useState('');
+  const [cargoType, setCargoType] = useState('');
+  const [freeDays, setFreeDays] = useState('');
+  const [bookingStatus, setBookingStatus] = useState('');
+  const [inspectionStatus, setInspectionStatus] = useState('');
+  const [recordStatus, setRecordStatus] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
   const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
@@ -62,6 +69,11 @@ export default function CreateShipment() {
       return;
     }
 
+    if (freeDays && Number.isNaN(Number(freeDays))) {
+      Alert.alert('Error', 'Free days debe ser un numero');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -84,12 +96,19 @@ export default function CreateShipment() {
           },
           body: JSON.stringify({
             do_number: doNumber,
+            tracking_number: trackingNumber || null,
             shipment_type: shipmentType || null,
             origin,
             destination,
             etd: etd || null,
             eta: eta || null,
+            documentary_cutoff: documentaryCutoff || null,
             incoterm: incoterm || null,
+            cargo_type: cargoType || null,
+            free_days: freeDays ? Number(freeDays) : null,
+            booking_status: bookingStatus || null,
+            inspection_status: inspectionStatus || null,
+            status: recordStatus || null,
             current_status: currentStatus || null,
             current_location: currentLocation || null,
             exporter: exporter || null,
@@ -147,12 +166,49 @@ export default function CreateShipment() {
         <View style={styles.form}>
           {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
           <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" onSubmitEditing={handleCreate} />
+          <Field label="Tracking Number" value={trackingNumber} onChangeText={setTrackingNumber} placeholder="TRK12345" onSubmitEditing={handleCreate} />
           <Field label="Via" value={shipmentType} onChangeText={setShipmentType} placeholder="Aereo / Maritimo" onSubmitEditing={handleCreate} />
           <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
           <Field label="Destino *" value={destination} onChangeText={setDestination} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
           <Field label="ETD" value={etd} onChangeText={setEtd} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
           <Field label="ETA" value={eta} onChangeText={setEta} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
+          <Field
+            label="Documentary Cutoff"
+            value={documentaryCutoff}
+            onChangeText={setDocumentaryCutoff}
+            placeholder="YYYY-MM-DD HH:mm"
+            onSubmitEditing={handleCreate}
+          />
           <Field label="Incoterm" value={incoterm} onChangeText={setIncoterm} placeholder="FOB, CIF..." onSubmitEditing={handleCreate} />
+          <Field
+            label="Cargo Type"
+            value={cargoType}
+            onChangeText={setCargoType}
+            placeholder="general, dangerous, perishable..."
+            onSubmitEditing={handleCreate}
+          />
+          <Field label="Free Days" value={freeDays} onChangeText={setFreeDays} placeholder="0" onSubmitEditing={handleCreate} />
+          <Field
+            label="Booking Status"
+            value={bookingStatus}
+            onChangeText={setBookingStatus}
+            placeholder="pending, confirmed, rejected..."
+            onSubmitEditing={handleCreate}
+          />
+          <Field
+            label="Inspection Status"
+            value={inspectionStatus}
+            onChangeText={setInspectionStatus}
+            placeholder="none, documentary, physical..."
+            onSubmitEditing={handleCreate}
+          />
+          <Field
+            label="Estado del Registro"
+            value={recordStatus}
+            onChangeText={setRecordStatus}
+            placeholder="active / inactive"
+            onSubmitEditing={handleCreate}
+          />
           <Field label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} placeholder="En transito" onSubmitEditing={handleCreate} />
           <Field label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
           <Field label="Exportador" value={exporter} onChangeText={setExporter} placeholder="Empresa" onSubmitEditing={handleCreate} />
@@ -211,7 +267,7 @@ function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: Fie
         value={value}
         onChangeText={onChangeText}
         returnKeyType="done"
-          onSubmitEditing={onSubmitEditing}
+        onSubmitEditing={onSubmitEditing}
       />
     </>
   );

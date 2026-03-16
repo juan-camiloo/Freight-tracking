@@ -18,12 +18,19 @@ const corsHeaders = {
 
 type Shipment = {
   do_number: string;
+  tracking_number?: string | null;
   shipment_type?: string | null;
   origin: string;
   destination: string;
   etd?: string | null;
   eta?: string | null;
+  documentary_cutoff?: string | null;
   incoterm?: string | null;
+  status?: string | null;
+  booking_status?: string | null;
+  inspection_status?: string | null;
+  free_days?: number | string | null;
+  cargo_type?: string | null;
   current_status?: string | null;
   current_location?: string | null;
   exporter?: string | null;
@@ -132,16 +139,48 @@ serve(async (req) => {
     }
 
     // 6) Crear el registro principal de la carga.
+    const normalizedFreeDays =
+      body.free_days === null || body.free_days === undefined || body.free_days === ""
+        ? null
+        : Number(body.free_days);
+
+    if (normalizedFreeDays !== null && Number.isNaN(normalizedFreeDays)) {
+      return new Response("Free days debe ser un numero", {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    const optionalStatus =
+      body.status && body.status.trim() !== "" ? { status: body.status } : {};
+    const optionalBookingStatus =
+      body.booking_status && body.booking_status.trim() !== ""
+        ? { booking_status: body.booking_status }
+        : {};
+    const optionalInspectionStatus =
+      body.inspection_status && body.inspection_status.trim() !== ""
+        ? { inspection_status: body.inspection_status }
+        : {};
+    const optionalCargoType =
+      body.cargo_type && body.cargo_type.trim() !== "" ? { cargo_type: body.cargo_type } : {};
+
     const { data: shipmentData, error: shipmentError } = await supabase
       .from("shipments")
       .insert({
         do_number: body.do_number,
+        tracking_number: body.tracking_number ?? null,
         shipment_type: body.shipment_type ?? null,
         origin: body.origin,
         destination: body.destination,
         etd: body.etd ?? null,
         eta: body.eta ?? null,
+        documentary_cutoff: body.documentary_cutoff ?? null,
         incoterm: body.incoterm ?? null,
+        ...optionalStatus,
+        ...optionalBookingStatus,
+        ...optionalInspectionStatus,
+        ...optionalCargoType,
+        free_days: normalizedFreeDays,
         current_status: body.current_status ?? null,
         current_location: body.current_location ?? null,
         exporter: body.exporter ?? null,
@@ -169,8 +208,8 @@ serve(async (req) => {
     const { error: relationError } = await supabase
       .from("profile_shipment")
       .upsert(
-        { profile_id: ownerId, shipment_id: shipmentData.id },
-        { onConflict: "profile_id,shipment_id" },
+        { client_id: ownerId, shipment_id: shipmentData.id },
+        { onConflict: "client_id,shipment_id" },
       );
 
     if (relationError) {
