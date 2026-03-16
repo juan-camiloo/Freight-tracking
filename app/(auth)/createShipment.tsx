@@ -4,9 +4,11 @@
 // - Validar campos minimos en cliente.
 // - Enviar payload a la Edge Function `create-shipment`.
 
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState, type CSSProperties } from 'react';
+import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
 import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
 
@@ -20,6 +22,81 @@ const COLORS = {
   textSecondary: '#6B7C8F',
   placeholder: '#8B98A6',
   border: '#D7E3EE',
+};
+
+const SHIPMENT_TYPES = [
+  { label: 'Aereo', value: 'Aereo' },
+  { label: 'Maritimo', value: 'Maritimo' },
+  { label: 'Terrestre', value: 'Terrestre' },
+];
+
+const INCOTERMS = [
+  { label: 'EXW', value: 'EXW' },
+  { label: 'FCA', value: 'FCA' },
+  { label: 'FAS', value: 'FAS' },
+  { label: 'FOB', value: 'FOB' },
+  { label: 'CFR', value: 'CFR' },
+  { label: 'CIF', value: 'CIF' },
+  { label: 'CPT', value: 'CPT' },
+  { label: 'CIP', value: 'CIP' },
+  { label: 'DAP', value: 'DAP' },
+  { label: 'DPU', value: 'DPU' },
+  { label: 'DDP', value: 'DDP' },
+];
+
+const CARGO_TYPES = [
+  { label: 'General', value: 'general' },
+  { label: 'Dangerous', value: 'dangerous' },
+  { label: 'Perishable', value: 'perishable' },
+  { label: 'Refrigerated', value: 'refrigerated' },
+  { label: 'Project', value: 'project' },
+];
+
+const BOOKING_STATUSES = [
+  { label: 'Pending', value: 'pending' },
+  { label: 'Confirmed', value: 'confirmed' },
+  { label: 'Rejected', value: 'rejected' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
+
+const INSPECTION_STATUSES = [
+  { label: 'None', value: 'none' },
+  { label: 'Documentary', value: 'documentary' },
+  { label: 'Physical', value: 'physical' },
+  { label: 'Customs', value: 'customs' },
+];
+
+const RECORD_STATUSES = [
+  { label: 'Activo', value: 'active' },
+  { label: 'Inactivo', value: 'inactive' },
+];
+
+type DateField = 'etd' | 'eta' | 'documentaryCutoff';
+
+const formatDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateTime = (date: Date) => {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${formatDate(date)} ${hours}:${minutes}`;
+};
+
+const parseDateValue = (value: string) => {
+  if (!value) return null;
+  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const mergeDateAndTime = (datePart: Date, timePart: Date) => {
+  const merged = new Date(datePart);
+  merged.setHours(timePart.getHours(), timePart.getMinutes(), 0, 0);
+  return merged;
 };
 
 export default function CreateShipment() {
@@ -50,8 +127,53 @@ export default function CreateShipment() {
   const [observation, setObservation] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
 
+  const [activeDateField, setActiveDateField] = useState<DateField | null>(null);
+  const [androidTimeField, setAndroidTimeField] = useState<DateField | null>(null);
+  const [dateDraft, setDateDraft] = useState(new Date());
+
   // Bloquea el boton de envio mientras la Edge Function procesa la request.
   const [saving, setSaving] = useState(false);
+
+  const getDateValue = (field: DateField) => {
+    switch (field) {
+      case 'etd':
+        return etd;
+      case 'eta':
+        return eta;
+      case 'documentaryCutoff':
+        return documentaryCutoff;
+      default:
+        return '';
+    }
+  };
+
+  const setDateValue = (field: DateField, value: string) => {
+    switch (field) {
+      case 'etd':
+        setEtd(value);
+        break;
+      case 'eta':
+        setEta(value);
+        break;
+      case 'documentaryCutoff':
+        setDocumentaryCutoff(value);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const openDatePicker = (field: DateField) => {
+    const currentValue = getDateValue(field);
+    const parsed = parseDateValue(currentValue);
+    setDateDraft(parsed ?? new Date());
+    setActiveDateField(field);
+  };
+
+  const applyDateSelection = (field: DateField, date: Date) => {
+    const formatted = field === 'documentaryCutoff' ? formatDateTime(date) : formatDate(date);
+    setDateValue(field, formatted);
+  };
 
   // Navegacion de retorno segura: usa back() si hay historial, fallback a raiz si no.
   const backFunction = () => {
@@ -167,48 +289,38 @@ export default function CreateShipment() {
           {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
           <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" onSubmitEditing={handleCreate} />
           <Field label="Tracking Number" value={trackingNumber} onChangeText={setTrackingNumber} placeholder="TRK12345" onSubmitEditing={handleCreate} />
-          <Field label="Via" value={shipmentType} onChangeText={setShipmentType} placeholder="Aereo / Maritimo" onSubmitEditing={handleCreate} />
+          <SelectField label="Via" value={shipmentType} onValueChange={setShipmentType} options={SHIPMENT_TYPES} placeholder="Selecciona via" />
           <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
           <Field label="Destino *" value={destination} onChangeText={setDestination} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
-          <Field label="ETD" value={etd} onChangeText={setEtd} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
-          <Field label="ETA" value={eta} onChangeText={setEta} placeholder="YYYY-MM-DD" onSubmitEditing={handleCreate} />
-          <Field
+          <DateField label="ETD" value={etd} placeholder="Selecciona fecha" onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
+          <DateField label="ETA" value={eta} placeholder="Selecciona fecha" onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
+          <DateField
             label="Documentary Cutoff"
             value={documentaryCutoff}
+            placeholder="Selecciona fecha y hora"
+            onPress={() => openDatePicker('documentaryCutoff')}
             onChangeText={setDocumentaryCutoff}
-            placeholder="YYYY-MM-DD HH:mm"
+            mode="datetime"
+          />
+          <SelectField label="Incoterm" value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder="Selecciona incoterm" />
+          <SelectField label="Cargo Type" value={cargoType} onValueChange={setCargoType} options={CARGO_TYPES} placeholder="Selecciona tipo de carga" />
+          <Field
+            label="Free Days"
+            value={freeDays}
+            onChangeText={setFreeDays}
+            placeholder="0"
+            keyboardType="numeric"
             onSubmitEditing={handleCreate}
           />
-          <Field label="Incoterm" value={incoterm} onChangeText={setIncoterm} placeholder="FOB, CIF..." onSubmitEditing={handleCreate} />
-          <Field
-            label="Cargo Type"
-            value={cargoType}
-            onChangeText={setCargoType}
-            placeholder="general, dangerous, perishable..."
-            onSubmitEditing={handleCreate}
-          />
-          <Field label="Free Days" value={freeDays} onChangeText={setFreeDays} placeholder="0" onSubmitEditing={handleCreate} />
-          <Field
-            label="Booking Status"
-            value={bookingStatus}
-            onChangeText={setBookingStatus}
-            placeholder="pending, confirmed, rejected..."
-            onSubmitEditing={handleCreate}
-          />
-          <Field
+          <SelectField label="Booking Status" value={bookingStatus} onValueChange={setBookingStatus} options={BOOKING_STATUSES} placeholder="Selecciona estado" />
+          <SelectField
             label="Inspection Status"
             value={inspectionStatus}
-            onChangeText={setInspectionStatus}
-            placeholder="none, documentary, physical..."
-            onSubmitEditing={handleCreate}
+            onValueChange={setInspectionStatus}
+            options={INSPECTION_STATUSES}
+            placeholder="Selecciona estado"
           />
-          <Field
-            label="Estado del Registro"
-            value={recordStatus}
-            onChangeText={setRecordStatus}
-            placeholder="active / inactive"
-            onSubmitEditing={handleCreate}
-          />
+          <SelectField label="Estado del Registro" value={recordStatus} onValueChange={setRecordStatus} options={RECORD_STATUSES} placeholder="Selecciona estado" />
           <Field label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} placeholder="En transito" onSubmitEditing={handleCreate} />
           <Field label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
           <Field label="Exportador" value={exporter} onChangeText={setExporter} placeholder="Empresa" onSubmitEditing={handleCreate} />
@@ -222,6 +334,8 @@ export default function CreateShipment() {
             value={ownerEmail}
             onChangeText={setOwnerEmail}
             placeholder="usuario@email.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
             onSubmitEditing={handleCreate}
           />
 
@@ -241,6 +355,58 @@ export default function CreateShipment() {
             <Text style={styles.buttonText}>{saving ? 'Creando...' : 'Crear Carga'}</Text>
           </TouchableOpacity>
         </View>
+
+        {Platform.OS !== 'web' && activeDateField ? (
+          <View style={Platform.OS === 'ios' ? styles.datePickerCard : {}}>
+            <DateTimePicker
+              value={dateDraft}
+              mode={activeDateField === 'documentaryCutoff' && Platform.OS === 'ios' ? 'datetime' : 'date'}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(event, selectedDate) => {
+                if (!activeDateField) return;
+                if (event.type === 'dismissed') {
+                  setActiveDateField(null);
+                  return;
+                }
+
+                const nextDate = selectedDate ?? dateDraft;
+
+                if (Platform.OS === 'android' && activeDateField === 'documentaryCutoff') {
+                  setDateDraft(nextDate);
+                  setActiveDateField(null);
+                  setAndroidTimeField(activeDateField);
+                  return;
+                }
+
+                applyDateSelection(activeDateField, nextDate);
+                if (Platform.OS !== 'ios') {
+                  setActiveDateField(null);
+                }
+              }}
+            />
+            {Platform.OS === 'ios' ? (
+              <TouchableOpacity style={styles.dateDoneButton} onPress={() => setActiveDateField(null)}>
+                <Text style={styles.dateDoneText}>Listo</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {Platform.OS === 'android' && androidTimeField ? (
+          <DateTimePicker
+            value={dateDraft}
+            mode="time"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setAndroidTimeField(null);
+              if (event.type === 'dismissed') return;
+              if (!androidTimeField) return;
+              const nextDate = selectedDate ?? dateDraft;
+              const merged = mergeDateAndTime(dateDraft, nextDate);
+              applyDateSelection(androidTimeField, merged);
+            }}
+          />
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -252,11 +418,13 @@ type FieldProps = {
   onChangeText: (text: string) => void;
   placeholder?: string;
   onSubmitEditing?: () => void;
+  keyboardType?: 'default' | 'numeric' | 'email-address';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 };
 
 // Componente reutilizable de etiqueta + input para reducir repeticion en el formulario.
 // No se extrae a un archivo separado porque solo se usa en esta pantalla.
-function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: FieldProps) {
+function Field({ label, value, onChangeText, placeholder, onSubmitEditing, keyboardType, autoCapitalize }: FieldProps) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
@@ -266,9 +434,107 @@ function Field({ label, value, onChangeText, placeholder, onSubmitEditing }: Fie
         placeholderTextColor={COLORS.placeholder}
         value={value}
         onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
         returnKeyType="done"
         onSubmitEditing={onSubmitEditing}
       />
+    </>
+  );
+}
+
+type SelectFieldProps = {
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  placeholder: string;
+};
+
+function SelectField({ label, value, onValueChange, options, placeholder }: SelectFieldProps) {
+  const isWeb = Platform.OS === 'web';
+  const displayColor = value ? COLORS.blueDark : COLORS.placeholder;
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[styles.pickerWrapper, isWeb ? styles.pickerWrapperWeb : {}]}>
+        <Picker
+          selectedValue={value}
+          onValueChange={(itemValue) => onValueChange(String(itemValue))}
+          style={[styles.picker, isWeb ? styles.pickerWeb : {}, { color: displayColor }]}
+          itemStyle={isWeb ? styles.pickerItemWeb : {}}
+          dropdownIconColor={COLORS.blueDark}
+        >
+          <Picker.Item label={placeholder} value="" color={COLORS.placeholder} />
+          {options.map((option) => (
+            <Picker.Item key={option.value} label={option.label} value={option.value} />
+          ))}
+        </Picker>
+      </View>
+    </>
+  );
+}
+
+type DateFieldProps = {
+  label: string;
+  value: string;
+  placeholder: string;
+  onPress: () => void;
+  onChangeText: (text: string) => void;
+  mode: 'date' | 'datetime';
+};
+
+const webDateInputStyle: CSSProperties = {
+  outlineStyle: 'none',
+  boxSizing: 'border-box',
+  WebkitAppearance: 'none',
+  appearance: 'none',
+  MozAppearance: 'textfield',
+};
+const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
+  if (!value) return '';
+  if (mode === 'date') return value;
+  return value.includes(' ') ? value.replace(' ', 'T') : value;
+};
+
+const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {
+  if (!value) return '';
+  if (mode === 'date') return value;
+  return value.includes('T') ? value.replace('T', ' ') : value;
+};
+
+function DateField({ label, value, placeholder, onPress, onChangeText, mode }: DateFieldProps) {
+  if (Platform.OS === 'web') {
+    const webInputStyle : CSSProperties = {
+      ...(StyleSheet.flatten(styles.input) as CSSProperties),
+    };
+    return (
+      <>
+        <Text style={styles.label}>{label}</Text>
+        <input
+          style={{
+            ...webInputStyle,
+            ...webDateInputStyle,
+            color: value ? COLORS.blueDark : COLORS.placeholder,
+          }}
+          placeholder={placeholder}
+          value={toWebDateValue(value, mode)}
+          onChange={(event) => {
+            const nextValue = (event.target as HTMLInputElement).value;
+            onChangeText(fromWebDateValue(nextValue, mode));
+          }}
+          type={mode === 'date' ? 'date' : 'datetime-local'}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={[styles.input, styles.inputPressable]} onPress={onPress} activeOpacity={0.8}>
+        <Text style={[styles.dateText, !value && styles.placeholderText]}>{value || placeholder}</Text>
+      </TouchableOpacity>
     </>
   );
 }
@@ -316,6 +582,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: COLORS.cream,
     color: COLORS.blueDark,
+    minHeight: 48,
+  },
+  inputPressable: {
+    justifyContent: 'center',
+  },
+  dateText: { fontSize: 16, color: COLORS.blueDark },
+  placeholderText: { color: COLORS.placeholder },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: COLORS.blueMid,
+    borderRadius: 8,
+    backgroundColor: COLORS.cream,
+    overflow: 'hidden',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  pickerWrapperWeb: {
+    paddingHorizontal: 12,
+  },
+  picker: {
+    width: '100%',
+    color: COLORS.blueDark,
+    height: 48,
+    fontSize: 16,
+    backgroundColor: COLORS.cream,
+    borderWidth: 0,
+  },
+  pickerWeb: {
+    paddingHorizontal: 0,
+    height: 46,
+    boxSizing: 'border-box',
+  },
+  pickerItemWeb: {
+    fontSize: 16,
   },
   textArea: { height: 100, textAlignVertical: 'top' },
   button: {
@@ -326,4 +626,23 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   buttonText: { color: COLORS.cream, fontSize: 16, fontWeight: '700' },
-}); 
+  datePickerCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: COLORS.creamGlass,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dateDoneButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.blue,
+    borderRadius: 8,
+  },
+  dateDoneText: { color: COLORS.cream, fontWeight: '700' },
+
+});
