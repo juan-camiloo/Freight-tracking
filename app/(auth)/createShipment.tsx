@@ -8,6 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
 import { useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
 import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
@@ -25,9 +26,9 @@ const COLORS = {
 };
 
 const SHIPMENT_TYPES = [
-  { label: 'Aereo', value: 'Aereo' },
-  { label: 'Maritimo', value: 'Maritimo' },
-  { label: 'Terrestre', value: 'Terrestre' },
+  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'Aereo' },
+  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'Maritimo' },
+  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'Terrestre' },
 ];
 
 const INCOTERMS = [
@@ -45,30 +46,25 @@ const INCOTERMS = [
 ];
 
 const CARGO_TYPES = [
-  { label: 'General', value: 'general' },
-  { label: 'Dangerous', value: 'dangerous' },
-  { label: 'Perishable', value: 'perishable' },
-  { label: 'Refrigerated', value: 'refrigerated' },
-  { label: 'Project', value: 'project' },
+  { labelKey: 'shipmentForm.options.cargoType.general', value: 'general' },
+  { labelKey: 'shipmentForm.options.cargoType.dangerous', value: 'dangerous' },
+  { labelKey: 'shipmentForm.options.cargoType.perishable', value: 'perishable' },
+  { labelKey: 'shipmentForm.options.cargoType.refrigerated', value: 'refrigerated' },
+  { labelKey: 'shipmentForm.options.cargoType.project', value: 'project' },
 ];
 
 const BOOKING_STATUSES = [
-  { label: 'Pending', value: 'pending' },
-  { label: 'Confirmed', value: 'confirmed' },
-  { label: 'Rejected', value: 'rejected' },
-  { label: 'Cancelled', value: 'cancelled' },
+  { labelKey: 'shipmentForm.options.bookingStatus.pending', value: 'pending' },
+  { labelKey: 'shipmentForm.options.bookingStatus.confirmed', value: 'confirmed' },
+  { labelKey: 'shipmentForm.options.bookingStatus.rejected', value: 'rejected' },
+  { labelKey: 'shipmentForm.options.bookingStatus.cancelled', value: 'cancelled' },
 ];
 
 const INSPECTION_STATUSES = [
-  { label: 'None', value: 'none' },
-  { label: 'Documentary', value: 'documentary' },
-  { label: 'Physical', value: 'physical' },
-  { label: 'Customs', value: 'customs' },
-];
-
-const RECORD_STATUSES = [
-  { label: 'Activo', value: 'active' },
-  { label: 'Inactivo', value: 'inactive' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.none', value: 'none' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.customs', value: 'customs' },
 ];
 
 type DateField = 'etd' | 'eta' | 'documentaryCutoff';
@@ -100,6 +96,8 @@ const mergeDateAndTime = (datePart: Date, timePart: Date) => {
 };
 
 export default function CreateShipment() {
+  const { t } = useTranslation();
+
   // Un estado por campo para mantener control granular sobre cada input
   // y facilitar el armado del payload sin transformaciones adicionales.
   const [doNumber, setDoNumber] = useState('');
@@ -115,7 +113,6 @@ export default function CreateShipment() {
   const [freeDays, setFreeDays] = useState('');
   const [bookingStatus, setBookingStatus] = useState('');
   const [inspectionStatus, setInspectionStatus] = useState('');
-  const [recordStatus, setRecordStatus] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
   const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
@@ -133,6 +130,38 @@ export default function CreateShipment() {
 
   // Bloquea el boton de envio mientras la Edge Function procesa la request.
   const [saving, setSaving] = useState(false);
+
+  const resolveOptions = (options: Array<{ labelKey: string; value: string }>) =>
+    options.map((option) => ({ label: t(option.labelKey), value: option.value }));
+
+  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPES);
+  const cargoTypeOptions = resolveOptions(CARGO_TYPES);
+  const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
+  const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
+
+  const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const payload = JSON.parse(text);
+          if (typeof payload?.error_key === 'string') {
+            return t(payload.error_key, payload.error_params ?? {});
+          }
+          if (typeof payload?.reason_key === 'string') {
+            return t(payload.reason_key, payload.reason_params ?? {});
+          }
+          if (typeof payload?.error === 'string') return payload.error;
+          if (typeof payload?.reason === 'string') return payload.reason;
+        } catch {
+          return text;
+        }
+      }
+    } catch {
+      // ignore response parsing errors
+    }
+    return fallbackMessage;
+  };
 
   const getDateValue = (field: DateField) => {
     switch (field) {
@@ -187,12 +216,12 @@ export default function CreateShipment() {
   // Valida campos obligatorios en cliente antes de consumir la Edge Function.
   const handleCreate = async () => {
     if (!doNumber || !origin || !destination) {
-      Alert.alert('Error', 'DO, origen y destino son obligatorios');
+      Alert.alert(t('common.error'), t('createShipment.doRequiredError'));
       return;
     }
 
     if (freeDays && Number.isNaN(Number(freeDays))) {
-      Alert.alert('Error', 'Free days debe ser un numero');
+      Alert.alert(t('common.error'), t('createShipment.freeDaysError'));
       return;
     }
 
@@ -203,7 +232,7 @@ export default function CreateShipment() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        Alert.alert('Error', 'No hay sesion activa, vuelve a iniciar sesion');
+        Alert.alert(t('common.error'), t('createShipment.noSession'));
         return;
       }
 
@@ -230,7 +259,6 @@ export default function CreateShipment() {
             free_days: freeDays ? Number(freeDays) : null,
             booking_status: bookingStatus || null,
             inspection_status: inspectionStatus || null,
-            status: recordStatus || null,
             current_status: currentStatus || null,
             current_location: currentLocation || null,
             exporter: exporter || null,
@@ -247,19 +275,19 @@ export default function CreateShipment() {
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'No se pudo crear la carga');
+        const errorMessage = await resolveErrorMessage(response, t('createShipment.createError'));
+        throw new Error(errorMessage);
       }
 
-      Alert.alert('Exito', 'Carga creada');
+      Alert.alert(t('common.success'), t('createShipment.createdOk'));
       // Reemplazar en lugar de push para que el usuario no pueda volver
       // al formulario ya enviado con el boton atras.
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Error', error.message);
+        Alert.alert(t('common.error'), error.message);
       } else {
-        Alert.alert('Error', 'Algo salio mal... Intentalo de nuevo');
+        Alert.alert(t('common.error'), t('createShipment.unknownError'));
       }
     } finally {
       setSaving(false);
@@ -278,72 +306,71 @@ export default function CreateShipment() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>Crear Carga</Text>
+        <Text style={styles.headerTitle}>{t('createShipment.headerTitle')}</Text>
         <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>Volver</Text>
+          <Text style={styles.topActionText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
           {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
-          <Field label="DO Number *" value={doNumber} onChangeText={setDoNumber} placeholder="DO12345" onSubmitEditing={handleCreate} />
-          <Field label="Tracking Number" value={trackingNumber} onChangeText={setTrackingNumber} placeholder="TRK12345" onSubmitEditing={handleCreate} />
-          <SelectField label="Via" value={shipmentType} onValueChange={setShipmentType} options={SHIPMENT_TYPES} placeholder="Selecciona via" />
-          <Field label="Origen *" value={origin} onChangeText={setOrigin} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
-          <Field label="Destino *" value={destination} onChangeText={setDestination} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
-          <DateField label="ETD" value={etd} placeholder="Selecciona fecha" onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
-          <DateField label="ETA" value={eta} placeholder="Selecciona fecha" onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
+          <Field label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} placeholder={t('shipmentForm.placeholders.doNumber')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.trackingNumber')} value={trackingNumber} onChangeText={setTrackingNumber} placeholder={t('shipmentForm.placeholders.trackingNumber')} onSubmitEditing={handleCreate} />
+          <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
+          <Field label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} placeholder={t('shipmentForm.placeholders.origin')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} placeholder={t('shipmentForm.placeholders.destination')} onSubmitEditing={handleCreate} />
+          <DateField label={t('shipmentForm.labels.etd')} value={etd} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
+          <DateField label={t('shipmentForm.labels.eta')} value={eta} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
           <DateField
-            label="Documentary Cutoff"
+            label={t('shipmentForm.labels.documentaryCutoff')}
             value={documentaryCutoff}
-            placeholder="Selecciona fecha y hora"
+            placeholder={t('shipmentForm.placeholders.dateTime')}
             onPress={() => openDatePicker('documentaryCutoff')}
             onChangeText={setDocumentaryCutoff}
             mode="datetime"
           />
-          <SelectField label="Incoterm" value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder="Selecciona incoterm" />
-          <SelectField label="Cargo Type" value={cargoType} onValueChange={setCargoType} options={CARGO_TYPES} placeholder="Selecciona tipo de carga" />
+          <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
+          <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
           <Field
-            label="Free Days"
+            label={t('shipmentForm.labels.freeDays')}
             value={freeDays}
             onChangeText={setFreeDays}
-            placeholder="0"
+            placeholder={t('shipmentForm.placeholders.freeDays')}
             keyboardType="numeric"
             onSubmitEditing={handleCreate}
           />
-          <SelectField label="Booking Status" value={bookingStatus} onValueChange={setBookingStatus} options={BOOKING_STATUSES} placeholder="Selecciona estado" />
+          <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
           <SelectField
-            label="Inspection Status"
+            label={t('shipmentForm.labels.inspectionStatus')}
             value={inspectionStatus}
             onValueChange={setInspectionStatus}
-            options={INSPECTION_STATUSES}
-            placeholder="Selecciona estado"
+            options={inspectionStatusOptions}
+            placeholder={t('shipmentForm.placeholders.inspectionStatus')}
           />
-          <SelectField label="Estado del Registro" value={recordStatus} onValueChange={setRecordStatus} options={RECORD_STATUSES} placeholder="Selecciona estado" />
-          <Field label="Estado Actual" value={currentStatus} onChangeText={setCurrentStatus} placeholder="En transito" onSubmitEditing={handleCreate} />
-          <Field label="Ubicacion Actual" value={currentLocation} onChangeText={setCurrentLocation} placeholder="Ciudad, Pais" onSubmitEditing={handleCreate} />
-          <Field label="Exportador" value={exporter} onChangeText={setExporter} placeholder="Empresa" onSubmitEditing={handleCreate} />
-          <Field label="Consignatario" value={consignee} onChangeText={setConsignee} placeholder="Empresa" onSubmitEditing={handleCreate} />
-          <Field label="Guia/Booking" value={airWaybill} onChangeText={setAirWaybill} placeholder="Numero" onSubmitEditing={handleCreate} />
-          <Field label="Vuelo/Motonave" value={flightVessel} onChangeText={setFlightVessel} placeholder="Nombre/ID" onSubmitEditing={handleCreate} />
-          <Field label="Contenedor" value={containerNumber} onChangeText={setContainerNumber} placeholder="CONT123" onSubmitEditing={handleCreate} />
-          <Field label="Naviera/Aerolinea" value={carrier} onChangeText={setCarrier} placeholder="Nombre" onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.status')} value={currentStatus} onChangeText={setCurrentStatus} placeholder={t('shipmentForm.placeholders.status')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} placeholder={t('shipmentForm.placeholders.location')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.exporter')} value={exporter} onChangeText={setExporter} placeholder={t('shipmentForm.placeholders.exporter')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.consignee')} value={consignee} onChangeText={setConsignee} placeholder={t('shipmentForm.placeholders.consignee')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.awb')} value={airWaybill} onChangeText={setAirWaybill} placeholder={t('shipmentForm.placeholders.awb')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.flight')} value={flightVessel} onChangeText={setFlightVessel} placeholder={t('shipmentForm.placeholders.flight')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.container')} value={containerNumber} onChangeText={setContainerNumber} placeholder={t('shipmentForm.placeholders.container')} onSubmitEditing={handleCreate} />
+          <Field label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} placeholder={t('shipmentForm.placeholders.carrier')} onSubmitEditing={handleCreate} />
           <Field
-            label="Correo del dueno de la carga"
+            label={t('shipmentForm.labels.ownerEmail')}
             value={ownerEmail}
             onChangeText={setOwnerEmail}
-            placeholder="usuario@email.com"
+            placeholder={t('shipmentForm.placeholders.ownerEmail')}
             keyboardType="email-address"
             autoCapitalize="none"
             onSubmitEditing={handleCreate}
           />
 
           {/* Observacion usa TextInput directo (no Field) por necesitar multiline */}
-          <Text style={styles.label}>Observacion (opcional)</Text>
+          <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Agregar observacion..."
+            placeholder={t('shipmentForm.placeholders.observation')}
             placeholderTextColor={COLORS.placeholder}
             value={observation}
             onChangeText={setObservation}
@@ -352,7 +379,7 @@ export default function CreateShipment() {
           />
 
           <TouchableOpacity style={styles.button} onPress={handleCreate} disabled={saving}>
-            <Text style={styles.buttonText}>{saving ? 'Creando...' : 'Crear Carga'}</Text>
+            <Text style={styles.buttonText}>{saving ? t('createShipment.creating') : t('createShipment.submit')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -386,7 +413,7 @@ export default function CreateShipment() {
             />
             {Platform.OS === 'ios' ? (
               <TouchableOpacity style={styles.dateDoneButton} onPress={() => setActiveDateField(null)}>
-                <Text style={styles.dateDoneText}>Listo</Text>
+                <Text style={styles.dateDoneText}>{t('common.done')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>

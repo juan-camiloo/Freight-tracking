@@ -58,10 +58,21 @@ export default function AddUser() {
         body: JSON.stringify({ email, nickname, is_internal: isInternal }),
       });
 
-      const data = await response.json();
+      let payload: any = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || t('addUser.inviteError'));
+        const errorMessage =
+          typeof payload?.error_key === 'string'
+            ? t(payload.error_key, payload.error_params ?? {})
+            : typeof payload?.error === 'string'
+              ? payload.error
+              : t('addUser.inviteError');
+        throw new Error(errorMessage);
       }
 
       Alert.alert(t('common.success'), t('addUser.createdSuccess'));

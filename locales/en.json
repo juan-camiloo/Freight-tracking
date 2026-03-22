@@ -11,7 +11,10 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "logout": "Log out",
-    "notFound": "Not found"
+    "done": "Done",
+    "notFound": "Not found",
+    "yes": "Yes",
+    "no": "No"
   },
   "login": {
     "headerTitle": "Sign in",
@@ -29,6 +32,8 @@
     "addUser": "+ Add User",
     "createShipment": "+ Create Shipment",
     "viewProfiles": "View Profiles",
+    "fabTickets": "Tickets",
+    "fabAssistant": "Assistant",
     "supportInbox": "Support Inbox",
     "noShipmentsFound": "No shipments found",
     "noShipmentsAvailable": "No shipments available"
@@ -47,6 +52,14 @@
     "inviteError": "Error inviting user",
     "unknownError": "Something went wrong... Please try again"
   },
+  "inviteUser": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "emailRequired": "Email required",
+    "notAuthorized": "Not authorized",
+    "inviteError": "Could not send invitation",
+    "internalError": "Internal server error"
+  },
   "profiles": {
     "headerTitle": "Profiles",
     "searchPlaceholder": "Search by alias or email...",
@@ -56,6 +69,64 @@
     "loadError": "Could not load profiles",
     "noSession": "No active session",
     "unknownError": "Something went wrong... Please try again"
+  },
+  "supportInbox": {
+    "headerTitle": "Support Tickets",
+    "searchPlaceholder": "Search by DO or email...",
+    "notFound": "No tickets found",
+    "empty": "No tickets available",
+    "createdAt": "Created: {{date}}",
+    "statusOpened": "Opened",
+    "statusInRevision": "In review",
+    "statusResolved": "Resolved",
+    "noDo": "No DO",
+    "noEmail": "No email",
+    "loadError": "Could not load tickets",
+    "noSession": "No active session"
+  },
+  "ticketDetail": {
+    "headerTitle": "Ticket Details",
+    "sectionInfo": "Information",
+    "sectionMessage": "Message",
+    "labels": {
+      "doNumber": "DO",
+      "email": "Email",
+      "status": "Status",
+      "createdAt": "Created",
+      "resolvedAt": "Resolved"
+    },
+    "notResolved": "Unresolved",
+    "actionInRevision": "Mark in review",
+    "actionResolve": "Mark as resolved",
+    "actionReopen": "Reopen",
+    "updating": "Updating...",
+    "updateOk": "Ticket updated",
+    "updateError": "Could not update ticket",
+    "loadError": "Could not load ticket",
+    "notFound": "Ticket not found"
+  },
+  "listProfiles": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "notInternal": "Profile is not internal",
+    "loadError": "Could not load profiles",
+    "internalError": "Internal server error"
+  },
+  "listTickets": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "notInternal": "Profile is not internal",
+    "loadError": "Could not load tickets",
+    "internalError": "Internal server error"
+  },
+  "updateTicket": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "notInternal": "Profile is not internal",
+    "invalidPayload": "Missing ticket data",
+    "invalidStatus": "Invalid status",
+    "updateError": "Could not update ticket",
+    "internalError": "Internal server error"
   },
   "profileDetail": {
     "headerTitle": "Profile",
@@ -92,16 +163,149 @@
     "placeholder": "Type your question...",
     "send": "Send",
     "sending": "Sending...",
-    "inactivityWarning": "Are you still there? If no activity is detected for 5 minutes the chat will close."
+    "inactivityWarning": "Are you still there? If no activity is detected for 5 minutes the chat will close.",
+    "assistantRequestError": "Could not reach the assistant.",
+    "assistantError": "There was a problem contacting the assistant.",
+    "assistantErrorWithDetail": "There was a problem contacting the assistant: {{message}}",
+    "assistantFallback": "I couldn't answer your request.",
+    "createTicketOption": "I don't have enough information to answer your question. Would you like to create a support case so our team can resolve your inquiry as soon as possible?",
+    "createdTicket": "Your ticket has been created succesfully",
+    "createTicketError": "I couldn't create the ticket. Please try again in a few minutes.",
+    "ticketRequestError": "Could not create the ticket.",
+    "ticketCreateFailed": "I couldn't create the ticket.",
+    "ticketCreateFailedWithDetail": "I couldn't create the ticket: {{message}}",
+    "categoryOptionsPrompt": "Ok, to continue with the process, please select the category to which your ticket belongs",
+    "options":{
+      "administrative": "Administrative",
+      "facturation": "Facturation",
+      "comercial": "Comercial",
+      "pricing": "Pricing",
+      "maritime": "Ocean ops",
+      "air": "Air Ops",
+      "other": "Other"
+    }
+  },
+  "chatbot": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "methodNotAllowed": "Method not allowed",
+    "noMessage": "No message was received.",
+    "offTopic": "I couldn't understand your request. Remember I'm an assistant for shipments, cargo, and logistics processes.",
+    "handoff": "This request requires our team's attention. We will contact you soon.",
+    "askDo": "To help you better, please provide your DO number.",
+    "askDoRequired": "To help you, I need your DO number.",
+    "aiParseError": "I couldn't understand your request. Please rephrase it or contact our team for personalized assistance.",
+    "aiNoInfo": "I couldn't find information to answer your request.",
+    "aiInvalidTable": "I couldn't process that request. Please contact our team.",
+    "aiNoValidFields": "I couldn't find valid fields to answer that request.",
+    "aiNoData": "I couldn't find information to answer your request.",
+    "aiNoAnswer": "I couldn't generate an answer to your request.",
+    "doNotFound": "I couldn't find information for that DO. Please verify the number or contact our team.",
+    "missingData": "I don't have that information registered for your shipment right now. Our operations team can confirm it manually.",
+    "internalError": "Internal server error"
+  },
+  "createTicket": {
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "messageRequired": "Message required",
+    "createError": "Error creating ticket",
+    "userNoEmail": "User has no email",
+    "internalError": "Internal server error"
+  },
+  "shipmentForm": {
+    "labels": {
+      "doNumber": "DO Number *",
+      "trackingNumber": "Tracking Number",
+      "via": "Mode",
+      "origin": "Origin *",
+      "destination": "Destination *",
+      "etd": "ETD",
+      "eta": "ETA",
+      "documentaryCutoff": "Documentary Cutoff",
+      "incoterm": "Incoterm",
+      "cargoType": "Cargo Type",
+      "freeDays": "Free Days",
+      "bookingStatus": "Booking Status",
+      "inspectionStatus": "Inspection Status",
+      "status": "Current Status",
+      "location": "Current Location",
+      "exporter": "Exporter",
+      "consignee": "Consignee",
+      "awb": "AWB/Booking",
+      "flight": "Flight/Vessel",
+      "container": "Container",
+      "carrier": "Carrier/Airline",
+      "ownerEmail": "Shipment owner email",
+      "observation": "Notes (optional)"
+    },
+    "placeholders": {
+      "doNumber": "DO12345",
+      "trackingNumber": "TRK12345",
+      "via": "Select mode",
+      "origin": "City, Country",
+      "destination": "City, Country",
+      "date": "Select date",
+      "dateTime": "Select date and time",
+      "incoterm": "Select an Incoterm",
+      "cargoType": "Select cargo type",
+      "freeDays": "0",
+      "bookingStatus": "Select status",
+      "inspectionStatus": "Select status",
+      "status": "In transit",
+      "location": "City, Country",
+      "exporter": "Company",
+      "consignee": "Company",
+      "awb": "Number",
+      "flight": "Name/ID",
+      "container": "CONT123",
+      "carrier": "Name",
+      "ownerEmail": "user@email.com",
+      "observation": "Add notes..."
+    },
+    "options": {
+      "shipmentType": {
+        "air": "Air",
+        "sea": "Sea",
+        "land": "Land"
+      },
+      "cargoType": {
+        "general": "General",
+        "dangerous": "Dangerous",
+        "perishable": "Perishable",
+        "refrigerated": "Refrigerated",
+        "project": "Project"
+      },
+      "bookingStatus": {
+        "pending": "Pending",
+        "confirmed": "Confirmed",
+        "rejected": "Rejected",
+        "cancelled": "Cancelled"
+      },
+      "inspectionStatus": {
+        "none": "None",
+        "documentary": "Documentary",
+        "physical": "Physical",
+        "customs": "Customs"
+      }
+    }
   },
   "createShipment": {
     "headerTitle": "Create Shipment",
     "doRequiredError": "DO, origin and destination are required",
+    "freeDaysError": "Free days must be a number",
     "noSession": "No active session, please sign in again",
+    "authHeaderMissing": "Missing authorization header",
+    "invalidSession": "Invalid token or session",
+    "notAuthorized": "Not authorized: only internal users can create shipments",
+    "ownerEmailNotFound": "Owner email not found",
     "createError": "Could not create shipment",
+    "relationError": "Could not associate shipment with user",
+    "updateError": "Could not register the initial update",
+    "internalError": "Internal server error",
     "createdOk": "Shipment created",
     "unknownError": "Something went wrong... Please try again",
     "creating": "Creating...",
+    "submit": "Create Shipment",
     "via": "Mode",
     "origin": "Origin *",
     "destination": "Destination *",
@@ -121,11 +325,25 @@
     "observation": "Notes (optional)",
     "observationPlaceholder": "Add notes..."
   },
+  "notifyShipmentEvent": {
+    "authHeaderMissing": "Missing authorization header",
+    "missingSecrets": "Supabase secrets are missing for this function.",
+    "invalidSession": "Invalid token or session",
+    "missingPayload": "event_type and shipment_id are required",
+    "invalidEventType": "Invalid event_type",
+    "shipmentError": "Could not load shipment",
+    "relationsError": "Could not resolve recipients",
+    "endpointsError": "Could not load notification endpoints",
+    "noRecipients": "No recipients to notify",
+    "noActiveTokens": "User has no active tokens",
+    "internalError": "Internal server error"
+  },
   "editShipment": {
     "headerTitle": "Edit Shipment",
     "saving": "Saving...",
     "save": "Save",
     "doRequiredError": "DO, origin and destination are required",
+    "freeDaysError": "Free days must be a number",
     "loadError": "Could not load shipment",
     "updatedOk": "Shipment updated",
     "unknownError": "Something went wrong... Try again",
@@ -157,7 +375,9 @@
     "uploadOk": "Document uploaded successfully",
     "uploadError": "Could not upload document",
     "openError": "Could not open document",
+    "cannotOpenDocument": "This device cannot open the document",
     "documentPathError": "Document path was not found",
+    "defaultDocumentName": "document",
     "opening": "Opening...",
     "uploading": "Uploading...",
     "uploadDocument": "Upload document",

@@ -303,7 +303,10 @@ serve(async (req) => {
     // 1) Validacion de autenticacion del request.
     const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return json(401, { error: "Falta el encabezado de autorizacion" });
+      return json(401, {
+        error: "Falta el encabezado de autorizacion",
+        error_key: "notifyShipmentEvent.authHeaderMissing",
+      });
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
@@ -312,7 +315,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-      return json(500, { error: "Faltan secretos de Supabase para la funcion." });
+      return json(500, {
+        error: "Faltan secretos de Supabase para la funcion.",
+        error_key: "notifyShipmentEvent.missingSecrets",
+      });
     }
 
     // Se usa anon key para validar el JWT del usuario sin privilegios elevados.
@@ -323,17 +329,24 @@ serve(async (req) => {
     } = await supabaseAuth.auth.getUser(token);
 
     if (authError || !user) {
-      return json(401, { error: "Token o sesion invalida" });
+      return json(401, {
+        error: "Token o sesion invalida",
+        error_key: "notifyShipmentEvent.invalidSession",
+        details: authError?.message,
+      });
     }
 
     // 2) Validacion de payload minimo.
     const body = (await req.json()) as NotifyBody;
     if (!body?.event_type || !body?.shipment_id) {
-      return json(400, { error: "event_type y shipment_id son obligatorios" });
+      return json(400, {
+        error: "event_type y shipment_id son obligatorios",
+        error_key: "notifyShipmentEvent.missingPayload",
+      });
     }
 
     if (!["assigned", "updated", "deleted"].includes(body.event_type)) {
-      return json(400, { error: "event_type invalido" });
+      return json(400, { error: "event_type invalido", error_key: "notifyShipmentEvent.invalidEventType" });
     }
 
     // Service role para consultas que requieren acceso sin restricciones de RLS.
@@ -348,7 +361,11 @@ serve(async (req) => {
       .maybeSingle();
 
     if (shipmentError && body.event_type !== "deleted") {
-      return json(400, { error: shipmentError.message });
+      return json(400, {
+        error: "No se pudo cargar la carga",
+        error_key: "notifyShipmentEvent.shipmentError",
+        details: shipmentError.message,
+      });
     }
 
     // 4) Resolucion de destinatarios con prioridad:
@@ -372,7 +389,11 @@ serve(async (req) => {
         .eq("shipment_id", body.shipment_id);
 
       if (relationsError && body.event_type !== "deleted") {
-        return json(400, { error: relationsError.message });
+        return json(400, {
+          error: "No se pudieron resolver los destinatarios",
+          error_key: "notifyShipmentEvent.relationsError",
+          details: relationsError.message,
+        });
       }
 
       const relations = (relationRows ?? []) as ProfileShipmentRelation[];
@@ -386,7 +407,11 @@ serve(async (req) => {
     }
 
     if (targetUserIds.length === 0) {
-      return json(200, { sent: 0, reason: "No hay destinatario para notificar" });
+      return json(200, {
+        sent: 0,
+        reason: "No hay destinatario para notificar",
+        reason_key: "notifyShipmentEvent.noRecipients",
+      });
     }
 
     // 5) Obtencion de endpoints push activos filtrando tokens inactivos o expirados.
@@ -397,12 +422,20 @@ serve(async (req) => {
       .eq("active", true);
 
     if (endpointsError) {
-      return json(400, { error: endpointsError.message });
+      return json(400, {
+        error: "No se pudieron cargar los endpoints de notificacion",
+        error_key: "notifyShipmentEvent.endpointsError",
+        details: endpointsError.message,
+      });
     }
 
     const rows = (endpoints ?? []) as PushEndpoint[];
     if (rows.length === 0) {
-      return json(200, { sent: 0, reason: "Usuario sin tokens activos" });
+      return json(200, {
+        sent: 0,
+        reason: "Usuario sin tokens activos",
+        reason_key: "notifyShipmentEvent.noActiveTokens",
+      });
     }
 
     // 6) Construccion del texto y deep-link segun tipo de evento.
@@ -445,7 +478,9 @@ serve(async (req) => {
   } catch (error) {
     // Captura errores no controlados para evitar exponer stack traces al cliente.
     return json(500, {
-      error: error instanceof Error ? error.message : "Ocurrio un error inesperado",
+      error: "Error interno del servidor",
+      error_key: "notifyShipmentEvent.internalError",
+      details: error instanceof Error ? error.message : "Ocurrio un error inesperado",
     });
   }
 });

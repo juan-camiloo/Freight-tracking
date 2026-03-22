@@ -16,6 +16,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 type Shipment = {
   do_number: string;
   tracking_number?: string | null;
@@ -55,10 +61,10 @@ serve(async (req) => {
     const authHeader =
       req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response("Falta el encabezado de autorizacion", {
-        status: 401,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        { error: "Falta el encabezado de autorizacion", error_key: "createShipment.authHeaderMissing" },
+        401,
+      );
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
@@ -75,13 +81,14 @@ serve(async (req) => {
     } = await supabaseAuth.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({
-        error: "Token o sesion invalida",
-        details: authError?.message,
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "Token o sesion invalida",
+          error_key: "createShipment.invalidSession",
+          details: authError?.message,
+        },
+        401,
+      );
     }
 
     // 3) Cliente service role para consultar y escribir en tablas protegidas por RLS.
@@ -99,10 +106,13 @@ serve(async (req) => {
       .single();
 
     if (requesterProfileError || !requesterProfile?.is_internal) {
-      return new Response("No autorizado: solo usuarios internos pueden crear cargas", {
-        status: 403,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "No autorizado: solo usuarios internos pueden crear cargas",
+          error_key: "createShipment.notAuthorized",
+        },
+        403,
+      );
     }
 
     // 4) Validar que los campos minimos obligatorios esten presentes en el payload.
@@ -110,10 +120,13 @@ serve(async (req) => {
     const { do_number, origin, destination, owner_email } = body;
 
     if (!do_number || !origin || !destination) {
-      return new Response("DO, Origen y Destino son obligatorios", {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "DO, Origen y Destino son obligatorios",
+          error_key: "createShipment.doRequiredError",
+        },
+        400,
+      );
     }
 
     // 5) Por defecto la carga se asigna al usuario que la crea.
@@ -129,10 +142,13 @@ serve(async (req) => {
         .maybeSingle();
 
       if (ownerError || !ownerProfile) {
-        return new Response("No se encontro el correo del propietario", {
-          status: 400,
-          headers: corsHeaders,
-        });
+        return jsonResponse(
+          {
+            error: "No se encontro el correo del propietario",
+            error_key: "createShipment.ownerEmailNotFound",
+          },
+          400,
+        );
       }
 
       ownerId = ownerProfile.id;
@@ -145,10 +161,13 @@ serve(async (req) => {
         : Number(body.free_days);
 
     if (normalizedFreeDays !== null && Number.isNaN(normalizedFreeDays)) {
-      return new Response("Free days debe ser un numero", {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "Free days debe ser un numero",
+          error_key: "createShipment.freeDaysError",
+        },
+        400,
+      );
     }
 
     const optionalStatus =
@@ -195,10 +214,14 @@ serve(async (req) => {
       .single();
 
     if (shipmentError) {
-      return new Response(shipmentError.message, {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "No se pudo crear la carga",
+          error_key: "createShipment.createError",
+          details: shipmentError.message,
+        },
+        400,
+      );
     }
 
     // 7) Crear la relacion usuario-carga en profile_shipment.
@@ -216,10 +239,14 @@ serve(async (req) => {
       // Si falla la relacion, se elimina la carga para no dejar un registro
       // huerfano que el cliente no podria ver ni que el sistema asociaria a nadie.
       await supabase.from("shipments").delete().eq("id", shipmentData.id);
-      return new Response(relationError.message, {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "No se pudo asociar la carga al usuario",
+          error_key: "createShipment.relationError",
+          details: relationError.message,
+        },
+        400,
+      );
     }
 
     // 8) Registrar la primera novedad de tracking del ciclo de vida de la carga.
@@ -236,26 +263,28 @@ serve(async (req) => {
       .single();
 
     if (shipmentUpdateError) {
-      return new Response(shipmentUpdateError.message, {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(
+        {
+          error: "No se pudo registrar la primera novedad",
+          error_key: "createShipment.updateError",
+          details: shipmentUpdateError.message,
+        },
+        400,
+      );
     }
 
     // Devuelve el merge del shipment y su primera novedad para que el cliente
     // tenga todo el estado inicial en una sola respuesta.
-    return new Response(JSON.stringify({ ...shipmentData, ...shipmentUpdateData }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-      status: 201,
-    });
+    return jsonResponse({ ...shipmentData, ...shipmentUpdateData }, 201);
   } catch (error) {
     // Captura errores no controlados para evitar exponer stack traces al cliente.
-    return new Response(
-      error instanceof Error ? error.message : "Ocurrio un error inesperado",
+    return jsonResponse(
       {
-        status: 500,
-        headers: corsHeaders,
+        error: "Error interno del servidor",
+        error_key: "createShipment.internalError",
+        details: error instanceof Error ? error.message : "Ocurrio un error inesperado",
       },
+      500,
     );
   }
 });

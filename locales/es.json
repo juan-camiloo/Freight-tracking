@@ -11,7 +11,10 @@
     "cancel": "Cancelar",
     "delete": "Eliminar",
     "logout": "Salir",
-    "notFound": "No encontrado"
+    "done": "Listo",
+    "notFound": "No encontrado",
+    "yes": "Sí",
+    "no" : "No"
   },
   "login": {
     "headerTitle": "Iniciar sesion",
@@ -29,6 +32,8 @@
     "addUser": "+ Agregar Usuario",
     "createShipment": "+ Crear Carga",
     "viewProfiles": "Ver Perfiles",
+    "fabTickets": "Tickets",
+    "fabAssistant": "Asistente",
     "supportInbox": "Bandeja Soporte",
     "noShipmentsFound": "No se encontraron cargas",
     "noShipmentsAvailable": "No hay cargas disponibles"
@@ -47,6 +52,14 @@
     "inviteError": "Error al invitar usuario",
     "unknownError": "Algo salio mal... Intentalo de nuevo"
   },
+  "inviteUser": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "emailRequired": "Email requerido",
+    "notAuthorized": "No autorizado",
+    "inviteError": "No se pudo enviar la invitacion",
+    "internalError": "Error interno del servidor"
+  },
   "profiles": {
     "headerTitle": "Perfiles",
     "searchPlaceholder": "Buscar por alias o correo...",
@@ -56,6 +69,74 @@
     "loadError": "No se pudieron cargar perfiles",
     "noSession": "No hay sesion activa",
     "unknownError": "Algo salio mal... Intentalo de nuevo"
+  },
+  "supportInbox": {
+    "headerTitle": "Tickets de soporte",
+    "searchPlaceholder": "Buscar por DO o correo...",
+    "notFound": "No se encontraron tickets",
+    "empty": "No hay tickets disponibles",
+    "createdAt": "Creado: {{date}}",
+    "statusOpened": "Abierto",
+    "statusInRevision": "En revision",
+    "statusResolved": "Resuelto",
+    "noDo": "Sin DO",
+    "noEmail": "Sin correo",
+    "loadError": "No se pudieron cargar los tickets",
+    "noSession": "No hay sesion activa"
+  },
+  "ticketDetail": {
+    "headerTitle": "Detalle de ticket",
+    "sectionInfo": "Informacion",
+    "sectionMessage": "Mensaje",
+    "labels": {
+      "doNumber": "DO",
+      "email": "Correo",
+      "status": "Estado",
+      "createdAt": "Creado",
+      "resolvedAt": "Resuelto"
+    },
+    "notResolved": "Sin resolver",
+    "actionInRevision": "Marcar en revision",
+    "actionResolve": "Marcar como resuelto",
+    "actionReopen": "Reabrir",
+    "updating": "Actualizando...",
+    "updateOk": "Ticket actualizado",
+    "updateError": "No se pudo actualizar el ticket",
+    "loadError": "No se pudo cargar el ticket",
+    "notFound": "Ticket no encontrado",
+    "categoryOptionsPrompt": "Bien, para continuar con el proceso, por favor especifique a qué categoria pertenece su consulta",
+    "options":{
+      "administrative": "Administrativo",
+      "facturation": "Facturación",
+      "comercial": "Comercial",
+      "pricing": "Pricing",
+      "maritime": "Operación marítima",
+      "air": "Aéreo",
+      "other": "Otro"
+    }
+  },
+  "listProfiles": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "notInternal": "El perfil no es interno",
+    "loadError": "No se pudieron cargar los perfiles",
+    "internalError": "Error interno del servidor"
+  },
+  "listTickets": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "notInternal": "El perfil no es interno",
+    "loadError": "No se pudieron cargar los tickets",
+    "internalError": "Error interno del servidor"
+  },
+  "updateTicket": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "notInternal": "El perfil no es interno",
+    "invalidPayload": "Datos incompletos",
+    "invalidStatus": "Estado invalido",
+    "updateError": "No se pudo actualizar el ticket",
+    "internalError": "Error interno del servidor"
   },
   "profileDetail": {
     "headerTitle": "Perfil",
@@ -92,16 +173,149 @@
     "placeholder": "Escribe tu pregunta...",
     "send": "Enviar",
     "sending": "Enviando...",
-    "inactivityWarning": "Sigues ahi? Si no se detecta actividad en 5 minutos se procedera a cerrar el chat."
+    "inactivityWarning": "¿Sigues ahi? Si no se detecta actividad en 5 minutos se procedera a cerrar el chat.",
+    "assistantRequestError": "No se pudo consultar al asistente.",
+    "assistantError": "Hubo un problema al consultar el asistente.",
+    "assistantErrorWithDetail": "Hubo un problema al consultar el asistente: {{message}}",
+    "assistantFallback": "No pude responder tu consulta.",
+    "createTicketOption": "No cuento con la informacion suficiente para resolver tu pregunta, ¿quieres crear un caso en soporte para que nuestro equipo resuelva tu duda lo mas pronto posible?",
+    "createdTicket": "Su ticket ha sido creado correctamente",
+    "createTicketError": "No pude crear el ticket. Intenta de nuevo en unos minutos.",
+    "ticketRequestError": "No se pudo crear el ticket.",
+    "ticketCreateFailed": "No pude crear el ticket.",
+    "ticketCreateFailedWithDetail": "No pude crear el ticket: {{message}}",
+    "categoryOptionsPrompt": "Bien, para continuar con el proceso, por favor especifique a qué categoria pertenece su consulta",
+    "options":{
+      "administrative": "Administrativo",
+      "facturation": "Facturacion",
+      "comercial": "Comercial",
+      "pricing": "Pricing",
+      "maritime": "Operación marítima",
+      "air": "Operación aérea",
+      "other": "Otro"
+    }
+  },
+  "chatbot": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesión invalida",
+    "methodNotAllowed": "Método no permitido",
+    "noMessage": "No se recibió ningún mensaje.",
+    "offTopic": "No pude entender tu consulta. Recuerda que soy un asistente para consultas sobre embarques, cargas y procesos logísticos.",
+    "handoff": "Esta consulta requiere atención de nuestro equipo. Te contactaremos pronto.",
+    "askDo": "Para ayudarte mejor, por favor proporciona tu número de DO.",
+    "askDoRequired": "Para ayudarte necesito tu número de DO.",
+    "aiParseError": "No pude entender tu consulta. Por favor reformúlala o contacta a nuestro equipo para asistencia personalizada.",
+    "aiNoInfo": "No pude encontrar información para darle respuesta a tu consulta.",
+    "aiInvalidTable": "No pude procesar esa consulta. Por favor contacta a nuestro equipo.",
+    "aiNoValidFields": "No encontré campos válidos para responder esa consulta.",
+    "aiNoData": "No encontré información para responder tu consulta.",
+    "aiNoAnswer": "No pude generar una respuesta a tu consulta.",
+    "doNotFound": "No pude encontrar información para ese DO. Por favor verifica el número o contacta a nuestro equipo.",
+    "missingData": "En este momento no tengo registrada esa información para tu embarque. Nuestro equipo de operaciones puede confirmarla manualmente.",
+    "internalError": "Error interno del servidor"
+  },
+  "createTicket": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "messageRequired": "Mensaje requerido",
+    "createError": "Error creando ticket",
+    "userNoEmail": "Usuario sin email",
+    "internalError": "Error interno del servidor"
+  },
+  "shipmentForm": {
+    "labels": {
+      "doNumber": "DO Number *",
+      "trackingNumber": "Tracking Number",
+      "via": "Via",
+      "origin": "Origen *",
+      "destination": "Destino *",
+      "etd": "ETD",
+      "eta": "ETA",
+      "documentaryCutoff": "Documentary Cutoff",
+      "incoterm": "Incoterm",
+      "cargoType": "Tipo de Carga",
+      "freeDays": "Dias Libres",
+      "bookingStatus": "Estado de Reserva",
+      "inspectionStatus": "Estado de Inspeccion",
+      "status": "Estado Actual",
+      "location": "Ubicacion Actual",
+      "exporter": "Exportador",
+      "consignee": "Consignatario",
+      "awb": "Guia/Booking",
+      "flight": "Vuelo/Motonave",
+      "container": "Contenedor",
+      "carrier": "Naviera/Aerolinea",
+      "ownerEmail": "Correo del dueno de la carga",
+      "observation": "Observacion (opcional)"
+    },
+    "placeholders": {
+      "doNumber": "DO12345",
+      "trackingNumber": "TRK12345",
+      "via": "Selecciona via",
+      "origin": "Ciudad, Pais",
+      "destination": "Ciudad, Pais",
+      "date": "Selecciona fecha",
+      "dateTime": "Selecciona fecha y hora",
+      "incoterm": "Selecciona incoterm",
+      "cargoType": "Selecciona tipo de carga",
+      "freeDays": "0",
+      "bookingStatus": "Selecciona estado",
+      "inspectionStatus": "Selecciona estado",
+      "status": "En transito",
+      "location": "Ciudad, Pais",
+      "exporter": "Empresa",
+      "consignee": "Empresa",
+      "awb": "Numero",
+      "flight": "Nombre/ID",
+      "container": "CONT123",
+      "carrier": "Nombre",
+      "ownerEmail": "usuario@email.com",
+      "observation": "Agregar observacion..."
+    },
+    "options": {
+      "shipmentType": {
+        "air": "Aereo",
+        "sea": "Maritimo",
+        "land": "Terrestre"
+      },
+      "cargoType": {
+        "general": "General",
+        "dangerous": "Peligrosa",
+        "perishable": "Perecedera",
+        "refrigerated": "Refrigerada",
+        "project": "Proyecto"
+      },
+      "bookingStatus": {
+        "pending": "Pendiente",
+        "confirmed": "Confirmada",
+        "rejected": "Rechazada",
+        "cancelled": "Cancelada"
+      },
+      "inspectionStatus": {
+        "none": "Ninguna",
+        "documentary": "Documental",
+        "physical": "Fisica",
+        "customs": "Aduana"
+      }
+    }
   },
   "createShipment": {
     "headerTitle": "Crear Carga",
     "doRequiredError": "DO, origen y destino son obligatorios",
+    "freeDaysError": "Dias libres debe ser un numero",
     "noSession": "No hay sesion activa, vuelve a iniciar sesion",
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "invalidSession": "Token o sesion invalida",
+    "notAuthorized": "No autorizado: solo usuarios internos pueden crear cargas",
+    "ownerEmailNotFound": "No se encontro el correo del propietario",
     "createError": "No se pudo crear la carga",
+    "relationError": "No se pudo asociar la carga al usuario",
+    "updateError": "No se pudo registrar la primera novedad",
+    "internalError": "Error interno del servidor",
     "createdOk": "Carga creada",
     "unknownError": "Algo salio mal... Intentalo de nuevo",
     "creating": "Creando...",
+    "submit": "Crear Carga",
     "via": "Via",
     "origin": "Origen *",
     "destination": "Destino *",
@@ -121,11 +335,25 @@
     "observation": "Observacion (opcional)",
     "observationPlaceholder": "Agregar observacion..."
   },
+  "notifyShipmentEvent": {
+    "authHeaderMissing": "Falta el encabezado de autorizacion",
+    "missingSecrets": "Faltan secretos de Supabase para la funcion.",
+    "invalidSession": "Token o sesion invalida",
+    "missingPayload": "event_type y shipment_id son obligatorios",
+    "invalidEventType": "event_type invalido",
+    "shipmentError": "No se pudo cargar la carga",
+    "relationsError": "No se pudieron resolver los destinatarios",
+    "endpointsError": "No se pudieron cargar los endpoints de notificacion",
+    "noRecipients": "No hay destinatario para notificar",
+    "noActiveTokens": "Usuario sin tokens activos",
+    "internalError": "Error interno del servidor"
+  },
   "editShipment": {
     "headerTitle": "Editar Carga",
     "saving": "Guardando...",
     "save": "Guardar",
     "doRequiredError": "DO, origen y destino son obligatorios",
+    "freeDaysError": "Dias libres debe ser un numero",
     "loadError": "No se pudo cargar la carga",
     "updatedOk": "Carga actualizada",
     "unknownError": "Algo salio mal... Intenta nuevamente",
@@ -157,7 +385,9 @@
     "uploadOk": "Documento subido correctamente",
     "uploadError": "No se pudo subir el documento",
     "openError": "No se pudo abrir el documento",
+    "cannotOpenDocument": "El dispositivo no puede abrir este documento",
     "documentPathError": "No se encontro la ruta del documento",
+    "defaultDocumentName": "documento",
     "opening": "Abriendo...",
     "uploading": "Subiendo...",
     "uploadDocument": "Subir documento",

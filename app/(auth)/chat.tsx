@@ -19,12 +19,12 @@ import {
   View,
 } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { chatAssistantFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
+import { chatAssistantFunctionUrl, createTicketFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
 
 type ChatMessage = {
   id: string;
   role: 'assistant' | 'user';
-  text: string;
+  text: string | undefined;
 };
 
 const COLORS = {
@@ -55,7 +55,7 @@ const extractDoNumber = (message: string) => {
   ]
   for (const pattern of patterns) {
     const match = message.match(pattern);
-    if (match) return match[0].toUpperCase();
+    if (match) return match[0].toLowerCase();
   }
   return null;
 };
@@ -71,6 +71,15 @@ export default function ChatAssistantScreen() {
     }),
     [t],
   );
+  const categories = [
+  {id: "administrative", label: t('chat.options.administrative')},
+  {id: "facturation", label: t('chat.options.facturation')},
+  {id: "comercial", label: t('chat.options.comercial')},
+  {id: "pricing", label: t('chat.options.pricing')},
+  {id: "maritime", label: t('chat.options.maritime')},
+  {id: "air", label: t('chat.options.air')},
+  {id: "other", label: t('chat.options.other')}
+]
   const recommendations = useMemo(
     () => [
       t('chat.recommendationEta'),
@@ -91,6 +100,11 @@ export default function ChatAssistantScreen() {
   const [sending, setSending] = useState(false);
   // DO detectado en la conversacion.
   const [doNumber, setDoNumber] = useState<string | null>(null);
+  // Gestión de creación de tickets
+  const ticketMessage = useRef<string | undefined>(undefined)
+  const [shouldShowTicketOption, setShouldShowTicketOption] = useState<boolean>(false);
+  const [shouldShowCategoryOptions, setShouldShowCategoryOptions] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState <string | null>(null);
 
   // Se usa para ocultar recomendaciones luego del primer mensaje del usuario.
   const hasUserMessages = useMemo(
@@ -159,24 +173,60 @@ export default function ChatAssistantScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated: true });
     });
-  }, [messages, sending]);
+  }, [messages, sending, shouldShowTicketOption]);
+
+  const resolveAnswerFromPayload = (payload: any) => {
+    if (typeof payload?.answer_key === 'string') {
+      return t(payload.answer_key, payload.answer_params ?? {});
+    }
+    return null;
+  };
+
+  const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
+    const raw = await response.text();
+    if (!raw) return fallbackMessage;
+    try {
+      const payload = JSON.parse(raw);
+      if (typeof payload?.error_key === 'string') {
+        return t(payload.error_key, payload.error_params ?? {});
+      }
+      if (typeof payload?.answer_key === 'string') {
+        return t(payload.answer_key, payload.answer_params ?? {});
+      }
+      if (typeof payload?.error === 'string') return payload.error;
+      if (typeof payload?.answer === 'string') return payload.answer;
+    } catch {
+      // ignore JSON parse errors
+    }
+    return raw;
+  };
+
+  const buildUserMessageError = (message: string) => {
+    const error = new Error(message);
+    (error as Error & { userMessage?: string }).userMessage = message;
+    return error;
+  };
+  
 
   // Envia mensaje del usuario a la Edge Function.
   const sendMessage = async (text: string) => {
+    setShouldShowTicketOption(false)
     
     const clean = text.trim();
     if (!clean || sending) return;
 
     markActivity();
-    appendMessage({
+    const userMessage: ChatMessage = {
       id: `${Date.now()}-user`,
       role: 'user',
       text: clean,
-    });
-
+    };
+    appendMessage (userMessage);
     setInput('');
     setSending(true);
-
+    if (!ticketMessage.current){
+      ticketMessage.current= userMessage.text
+    }
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -195,7 +245,7 @@ export default function ChatAssistantScreen() {
       .replace(/mi do es\s+\S+/gi, '')
       .replace(/\bx\d+\b/gi, '')
       .replace(/\bm\d+\b/gi, '')
-      .trim();
+      .trim() || "¿Puedes darme la información que tengas sobre mi embarque?";
 
       const response = await fetch(chatAssistantFunctionUrl, {
         method: 'POST',
@@ -212,13 +262,22 @@ export default function ChatAssistantScreen() {
       console.log("Status:", response.status)
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'No se pudo consultar al asistente.');
+        const errorMessage = await resolveErrorMessage(response, t('chat.assistantRequestError'));
+        throw buildUserMessageError(errorMessage);
       }
-
       const data = await response.json();
-      const answer = typeof data?.answer === 'string' ? data.answer : 'No pude responder tu consulta.';
+      const translatedAnswer = resolveAnswerFromPayload(data);
+      const answer =
+        translatedAnswer ??
+        (typeof data?.answer === 'string' ? data.answer : t('chat.assistantFallback'));
 
+      if (data.mode === "handoff"){
+        console.log("ticketMessage actual:", ticketMessage)
+        console.log("data.mode: ", data.mode)
+        console.log("userMessage.text:", userMessage.text)
+
+        setShouldShowTicketOption(true)
+      }
       appendMessage({
         id: `${Date.now()}-assistant`,
         role: 'assistant',
@@ -229,20 +288,68 @@ export default function ChatAssistantScreen() {
         id: `${Date.now()}-assistant-error`,
         role: 'assistant',
         text:
-          error instanceof Error
-            ? `Hubo un problema al consultar el asistente: ${error.message}`
-            : 'Hubo un problema al consultar el asistente.',
+          typeof (error as { userMessage?: string })?.userMessage === 'string'
+            ? (error as { userMessage?: string }).userMessage
+            : error instanceof Error
+              ? t('chat.assistantErrorWithDetail', { message: error.message })
+              : t('chat.assistantError'),
       });
     } finally {
       setSending(false);
     }
   };
+  const handleCreateTicket = async (category:string) =>{
+    console.log("ticketMessage al crear ticket:", ticketMessage)
+    const {data: dataSession} = await supabase.auth.getSession()
+    const accessToken=dataSession.session?.access_token
+    if (!accessToken) return;
+    try{
+      const response = await fetch (createTicketFunctionUrl,{
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: supabaseAnonKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: ticketMessage.current ?? '',
+          do_number: doNumber || null,
+          category: category || null,
+        }),          
+      })
+      if (!response.ok){
+        const errorMessage = await resolveErrorMessage(response, t('chat.ticketRequestError'))
+        throw buildUserMessageError(errorMessage)
+      }
+      ticketMessage.current= undefined
+      setShouldShowTicketOption(false);
+      
+      appendMessage({
+        id: `${Date.now()}-assistant`,
+        role: 'assistant',
+        text: t('chat.createdTicket')
+      })
+  }catch (error){
+    appendMessage({
+      id: `${Date.now()}-assistant`,
+      role: 'assistant',
+      text: 
+        typeof (error as { userMessage?: string })?.userMessage === 'string'
+          ? (error as { userMessage?: string }).userMessage
+          : error instanceof Error
+            ? t('chat.ticketCreateFailedWithDetail', { message: error.message })
+            : t('chat.ticketCreateFailed')
+    })
+  }
+  }
 
   // Prellena input con una sugerencia.
   const handleSuggestionPress = (suggestion: string) => {
     markActivity();
     setInput(suggestion);
   };
+
+  
 
   const backFunction = () => {
     if (router.canGoBack()) {
@@ -270,7 +377,7 @@ export default function ChatAssistantScreen() {
         <LogoCorner />
         <Text style={styles.headerTitle}>{t('chat.headerTitle')}</Text>
         <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>Volver</Text>
+          <Text style={styles.topActionText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -279,6 +386,7 @@ export default function ChatAssistantScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.chatContent}
           renderItem={({ item }) => (
             <View
@@ -298,12 +406,55 @@ export default function ChatAssistantScreen() {
             </View>
           )}
           ListFooterComponent={
-            sending ? (
-              <View style={[styles.bubble, styles.assistantBubble]}>
-                <View style={styles.typingRow}>
-                  <ActivityIndicator size="small" color={COLORS.orange} />
-                  <Text style={styles.typingText}>{t('chat.typing')}</Text>
-                </View>
+            sending || shouldShowTicketOption || shouldShowCategoryOptions ? (
+              <View style={styles.footer}>
+                {sending ? (
+                  <View style={[styles.bubble, styles.assistantBubble]}>
+                    <View style={styles.typingRow}>
+                      <ActivityIndicator size="small" color={COLORS.orange} />
+                      <Text style={styles.typingText}>{t('chat.typing')}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {shouldShowTicketOption ? (
+                  <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
+                    <Text style={styles.ticketPrompt}>{t('chat.createTicketOption')}</Text>
+                    <View style={styles.ticketActions}>
+                      <TouchableOpacity
+                        onPress={() => setShouldShowCategoryOptions(true)}
+                        style={[styles.ticketButton, styles.ticketButtonPrimary]}
+                      >
+                        <Text style={styles.ticketButtonPrimaryText}>{t('common.yes')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setShouldShowTicketOption(false)}
+                        style={[styles.ticketButton, styles.ticketButtonSecondary]}
+                      >
+                        <Text style={styles.ticketButtonSecondaryText}>{t('common.no')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>     
+                ) : null}
+                {shouldShowCategoryOptions?(
+                  <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
+                    <Text style={styles.ticketPrompt}>{t('chat.categoryOptionsPrompt')}</Text>
+                    <View style={styles.ticketActions}>
+                      {categories.map((cat) =>(
+                      <TouchableOpacity
+                        key={cat.id}
+                        onPress= {()=>{
+                          setSelectedCategory(cat.id)
+                          setShouldShowCategoryOptions(false)
+                          handleCreateTicket(cat.id)
+                        }}
+                        style = {[styles.ticketButton, styles.ticketButtonPrimary]}
+                      >
+                      <Text style= {styles.ticketButtonPrimaryText}>{cat.label}</Text>
+                      </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ): null} 
               </View>
             ) : null
           }
@@ -325,7 +476,7 @@ export default function ChatAssistantScreen() {
             </View>
           </View>
         )}
-
+      
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
@@ -399,6 +550,21 @@ const styles = StyleSheet.create({
   userText: { color: COLORS.cream },
   typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   typingText: { color: COLORS.textSecondary },
+  footer: { gap: 10 },
+  ticketCard: { gap: 10 },
+  ticketPrompt: { color: COLORS.blueDark, fontSize: 13, lineHeight: 18 },
+  ticketActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  ticketButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  ticketButtonPrimary: { backgroundColor: COLORS.orange, borderColor: COLORS.orange },
+  ticketButtonPrimaryText: { color: COLORS.blueDark, fontWeight: '700' },
+  ticketButtonSecondary: { backgroundColor: 'transparent', borderColor: COLORS.blueMid },
+  ticketButtonSecondaryText: { color: COLORS.blueDark, fontWeight: '600' },
   recommendations: {
     marginHorizontal: 16,
     marginTop: 6,
@@ -459,4 +625,3 @@ const styles = StyleSheet.create({
   sendButtonDisabled: { opacity: 0.6 },
   sendButtonText: { color: COLORS.blueDark, fontWeight: '700' },
 });
-

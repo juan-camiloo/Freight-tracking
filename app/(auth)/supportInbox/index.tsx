@@ -1,12 +1,12 @@
-// Archivo: app/(auth)/profiles.tsx
-// Descripcion: Pantalla de perfiles para usuarios internos. Permite cargar, buscar y abrir el detalle de cada perfil.
+// Archivo: app/(auth)/supportInbox/index.tsx
+// Descripcion: Bandeja de tickets para usuarios internos. Permite buscar por DO o correo.
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../components/LogoCorner';
-import { listProfilesFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
+import LogoCorner from '../../../components/LogoCorner';
+import { listTicketsFunctionUrl, supabase, supabaseAnonKey } from '../../../lib/supabase';
 
 const COLORS = {
   blue: '#1E5F99',
@@ -18,13 +18,19 @@ const COLORS = {
   textSecondary: '#6B7C8F',
   placeholder: '#8B98A6',
   border: '#D7E3EE',
+  statusResolved: '#2E7D32',
 };
 
-type Profile = {
+type Ticket = {
   id: string;
-  email: string | null;
-  is_internal: boolean;
-  nickname?: string | null;
+  do_number: string | null;
+  user_id: string | null;
+  message: string;
+  ticket_status: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  user_email?: string | null;
+  user_nickname?: string | null;
 };
 
 // Evita loguear como error cancelaciones de promesas por navegacion o recarga.
@@ -32,16 +38,35 @@ const isAbortError = (error: unknown) =>
   error instanceof Error &&
   (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
 
-export default function Profiles() {
+const formatDate = (raw?: string | null) => {
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString();
+};
+
+export default function SupportInbox() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
-  // Lista completa de perfiles cargada desde la Edge Function.
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  // Subconjunto filtrado localmente mientras el usuario escribe.
-  const [searchResults, setSearchResults] = useState<Profile[]>([]);
-  // Indicador visual del filtrado en progreso.
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [searchResults, setSearchResults] = useState<Ticket[]>([]);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const statusLabels = useMemo(
+    () => ({
+      opened: t('supportInbox.statusOpened'),
+      in_revision: t('supportInbox.statusInRevision'),
+      resolved: t('supportInbox.statusResolved'),
+    }),
+    [t],
+  );
+
+  const statusColors: Record<string, string> = {
+    opened: COLORS.orange,
+    in_revision: COLORS.blue,
+    resolved: COLORS.statusResolved,
+  };
 
   const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
     try {
@@ -68,33 +93,24 @@ export default function Profiles() {
   };
 
   useEffect(() => {
-    void loadUserAndProfiles();
+    void loadTickets();
   }, []);
 
-  // Debounce de 250ms para filtrar localmente sin saturar el hilo principal
-  // y mostrar feedback visual (ruedita de carga).
-  // Se incluye profiles como dependencia porque el filtro opera sobre ese array.
+  // Debounce para filtro local.
   useEffect(() => {
-    const clean = searchQuery.trim();
-    if (!clean) {
+    if (!searchQuery.trim()) {
       setSearchResults([]);
-      setSearching(false);
       return;
     }
 
-    setSearching(true);
     const timeout = setTimeout(() => {
-      filterProfiles(clean);
-      setSearching(false);
+      filterTickets();
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [searchQuery, profiles]);
+  }, [searchQuery, tickets]);
 
-  // Valida sesion y carga todos los perfiles via Edge Function.
-  // Se usa la Edge Function en lugar de consultar Supabase directo porque
-  // la tabla profiles puede tener RLS que limite la visibilidad entre usuarios.
-  const loadUserAndProfiles = async () => {
+  const loadTickets = async () => {
     try {
       const {
         data: { user },
@@ -111,54 +127,51 @@ export default function Profiles() {
 
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
-        Alert.alert(t('common.error'), t('profiles.noSession'));
+        Alert.alert(t('common.error'), t('supportInbox.noSession'));
         return;
       }
 
-      const response = await fetch(
-        listProfilesFunctionUrl,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: supabaseAnonKey,
-            'Content-Type': 'application/json',
-          },
+      const response = await fetch(listTicketsFunctionUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: supabaseAnonKey,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({}),
+      });
 
       if (!response.ok) {
-        const errorMessage = await resolveErrorMessage(response, t('profiles.loadError'));
+        const errorMessage = await resolveErrorMessage(response, t('supportInbox.loadError'));
         throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      setProfiles(data || []);
+      setTickets(data || []);
     } catch (error) {
       if (isAbortError(error)) return;
-      console.error('Error cargando perfiles:', error);
-      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('profiles.unknownError'));
+      console.error('Error cargando tickets:', error);
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('supportInbox.loadError'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Filtra localmente sobre el array ya cargado en memoria.
-  // No requiere nueva consulta al servidor porque los perfiles son pocos
-  // y la lista completa ya esta disponible tras la carga inicial.
-  const filterProfiles = (cleanQuery: string) => {
-    const clean = cleanQuery.trim().toLowerCase();
+  const filterTickets = () => {
+    setSearching(true);
+    const clean = searchQuery.trim().toLowerCase();
 
-    const next = profiles.filter((item) => {
-      const nickname = item.nickname?.toLowerCase() ?? '';
-      const email = item.email?.toLowerCase() ?? '';
-      return nickname.includes(clean) || email.includes(clean);
+    const next = tickets.filter((ticket) => {
+      const doNumber = ticket.do_number?.toLowerCase() ?? '';
+      const email = ticket.user_email?.toLowerCase() ?? '';
+      const nickname = ticket.user_nickname?.toLowerCase() ?? '';
+      return doNumber.includes(clean) || email.includes(clean) || nickname.includes(clean);
     });
 
     setSearchResults(next);
+    setSearching(false);
   };
 
-  // Navegacion de retorno segura: usa back() si hay historial, reemplaza a raiz si no.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -175,15 +188,13 @@ export default function Profiles() {
     );
   }
 
-  // Si hay busqueda activa se muestran los resultados filtrados; si no, la lista completa.
-  const listData = searchQuery.trim().length > 0 ? searchResults : profiles;
+  const listData = searchQuery.trim().length > 0 ? searchResults : tickets;
 
   return (
     <View style={styles.container}>
-      {/* pointerEvents="none" en el fondo para que los toques pasen a los elementos superiores */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Image
-          source={require('../../visual/background.png')}
+          source={require('../../../visual/background.png')}
           style={styles.background}
           resizeMode="cover"
         />
@@ -191,7 +202,7 @@ export default function Profiles() {
 
       <View style={styles.fixedHeader}>
         <LogoCorner />
-        <Text style={styles.headerTitle}>{t('profiles.headerTitle')}</Text>
+        <Text style={styles.headerTitle}>{t('supportInbox.headerTitle')}</Text>
         <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
           <Text style={styles.topActionText}>{t('common.back')}</Text>
         </TouchableOpacity>
@@ -201,20 +212,12 @@ export default function Profiles() {
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
-            placeholder={t('profiles.searchPlaceholder')}
+            placeholder={t('supportInbox.searchPlaceholder')}
             placeholderTextColor={COLORS.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
-            onSubmitEditing={() => {
-              const clean = searchQuery.trim();
-              if (!clean) {
-                setSearchResults([]);
-                setSearching(false);
-                return;
-              }
-              filterProfiles(clean);
-            }}
+            onSubmitEditing={filterTickets}
           />
         </View>
 
@@ -229,31 +232,43 @@ export default function Profiles() {
           data={listData}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
-            // Prioridad de label: nickname > email > texto por defecto.
-            // Garantiza que siempre haya algo legible en la tarjeta.
-            const label =
-              (item.nickname && item.nickname.trim()) ||
-              (item.email && item.email.trim()) ||
-              t('profiles.unnamedProfile');
+            const statusKey = item.ticket_status ?? 'opened';
+            const statusLabel = statusLabels[statusKey as keyof typeof statusLabels] || statusKey;
+            const statusColor = statusColors[statusKey] ?? COLORS.blueMid;
+            const doLabel = item.do_number?.trim() ? item.do_number : t('supportInbox.noDo');
+            const emailLabel = item.user_email?.trim() ? item.user_email : t('supportInbox.noEmail');
+            const createdLabel = formatDate(item.created_at);
+            const messageText = item.message ?? '';
+            const preview =
+              messageText.length > 120 ? `${messageText.slice(0, 120).trim()}...` : messageText;
 
             return (
               <TouchableOpacity
                 style={styles.card}
                 onPress={() =>
                   router.push({
-                    pathname: '/profile/[id]',
+                    pathname: '/supportInbox/[id]',
                     params: { id: item.id },
                   })
                 }
               >
-                <Text style={styles.cardProfile}>{label}</Text>
-                {item.email && <Text style={styles.cardSub}>{item.email}</Text>}
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardDO}>{doLabel}</Text>
+                  <View style={[styles.statusPill, { backgroundColor: statusColor }]}>
+                    <Text style={styles.statusText}>{statusLabel}</Text>
+                  </View>
+                </View>
+                <Text style={styles.cardEmail}>{emailLabel}</Text>
+                {createdLabel ? (
+                  <Text style={styles.cardDate}>{t('supportInbox.createdAt', { date: createdLabel })}</Text>
+                ) : null}
+                <Text style={styles.cardMessage}>{preview}</Text>
               </TouchableOpacity>
             );
           }}
           ListEmptyComponent={
             <Text style={styles.emptyText}>
-              {searchQuery.trim().length > 0 ? t('profiles.notFound') : t('profiles.empty')}
+              {searchQuery.trim().length > 0 ? t('supportInbox.notFound') : t('supportInbox.empty')}
             </Text>
           }
         />
@@ -318,8 +333,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
+    gap: 6,
   },
-  cardProfile: { fontSize: 18, fontWeight: 'bold', marginBottom: 5, color: COLORS.blueDark },
-  cardSub: { color: COLORS.textSecondary },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cardDO: { fontSize: 18, fontWeight: 'bold', color: COLORS.blueDark },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  cardEmail: { color: COLORS.blueDark, fontSize: 14, fontWeight: '600' },
+  cardDate: { color: COLORS.textSecondary, fontSize: 12 },
+  cardMessage: { color: COLORS.textSecondary, fontSize: 13 },
   emptyText: { textAlign: 'center', marginTop: 50, color: COLORS.textSecondary },
 });

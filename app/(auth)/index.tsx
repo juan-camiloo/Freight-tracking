@@ -5,9 +5,10 @@ y en caso de usuario interno, muestra acciones de administracion.
 
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
-import { supabase, supabaseAnonKey } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 
 const COLORS = {
   blue: '#1E5F99',
@@ -38,6 +39,7 @@ const isAbortError = (error: unknown) =>
   (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   // Valor actual del campo de busqueda.
   const [searchQuery, setSearchQuery] = useState('');
   // Datos completos devueltos por la carga inicial de cargas.
@@ -53,7 +55,6 @@ export default function Dashboard() {
 
   // Carga inicial: valida sesion, determina rol e hidrata la lista de cargas.
   useEffect(() => {
-    console.log('SUPABASE_ANON_KEY:', supabaseAnonKey);
     void loadUserAndShipments();
   }, []);
 
@@ -161,10 +162,10 @@ export default function Dashboard() {
         <LogoCorner />
         {/* Titulo diferenciado segun tipo de usuario para mayor claridad contextual. */}
         <Text style={styles.headerTitle}>
-          {isInternal ? 'Cargas Vigentes' : 'Sus Cargas Disponibles'}
+          {isInternal ? t('dashboard.headerInternal') : t('dashboard.headerExternal')}
         </Text>
         <TouchableOpacity onPress={handleLogout} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>Salir</Text>
+          <Text style={styles.topActionText}>{t('common.logout')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -173,7 +174,7 @@ export default function Dashboard() {
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar por DO..."
+            placeholder={t('dashboard.searchPlaceholder')}
             placeholderTextColor={COLORS.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -190,7 +191,7 @@ export default function Dashboard() {
         {searching && (
           <View style={styles.searchStatus}>
             <ActivityIndicator size="small" color={COLORS.orange} />
-            <Text style={styles.searchStatusText}>Buscando...</Text>
+            <Text style={styles.searchStatusText}>{t('common.searching')}</Text>
           </View>
         )}
 
@@ -198,21 +199,21 @@ export default function Dashboard() {
         {isInternal && (
           <View style={styles.internalActions}>
             <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/createShipment')}>
-              <Text style={styles.actionButtonText}>+ Crear Carga</Text>
+              <Text style={styles.actionButtonText}>{t('dashboard.createShipment')}</Text>
             </TouchableOpacity>
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionButtonAlt, styles.actionHalf]}
                 onPress={() => router.push('/addUser')}
               >
-                <Text style={styles.actionButtonAltText}>+ Agregar Usuario</Text>
+                <Text style={styles.actionButtonAltText}>{t('dashboard.addUser')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionButtonAlt1, styles.actionHalf]}
                 onPress={() => router.push('/profiles')}
               >
-                <Text style={styles.actionButtonAltText}>Ver Perfiles</Text>
+                <Text style={styles.actionButtonAltText}>{t('dashboard.viewProfiles')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -221,11 +222,11 @@ export default function Dashboard() {
         {/* FAB flotante: IA para externos, Bandeja Soporte para internos */}
         {isInternal ? (
           <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/supportInbox' as any)}>
-            <Text style={styles.fabAssistantText}>Tickets</Text>
+            <Text style={styles.fabAssistantText}>{t('dashboard.fabTickets')}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
-            <Text style={styles.fabAssistantText}>Asistente</Text>
+            <Text style={styles.fabAssistantText}>{t('dashboard.fabAssistant')}</Text>
           </TouchableOpacity>
         )}
 
@@ -247,8 +248,8 @@ export default function Dashboard() {
           ListEmptyComponent={
             <Text style={styles.emptyText}>
               {searchQuery.trim().length > 0
-                ? 'No se encontraron cargas'
-                : 'No hay cargas disponibles'}
+                ? t('dashboard.noShipmentsFound')
+                : t('dashboard.noShipmentsAvailable')}
             </Text>
           }
         />

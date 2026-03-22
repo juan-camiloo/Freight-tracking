@@ -14,6 +14,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "OPTIONS, POST, GET",
 };
 
+const jsonResponse = (payload: unknown, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 serve(async (req) => {
   // Respuesta inmediata al preflight CORS sin procesar autenticacion.
   if (req.method === "OPTIONS") {
@@ -24,10 +30,10 @@ serve(async (req) => {
     // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Falta el encabezado de autorizacion" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Falta el encabezado de autorizacion", error_key: "listProfiles.authHeaderMissing" },
+        401,
+      );
     }
 
     // Extraer el token JWT eliminando el prefijo "Bearer ".
@@ -49,13 +55,14 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({
-        error: "Token o sesion invalida",
-        details: authError?.message,
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "Token o sesion invalida",
+          error_key: "listProfiles.invalidSession",
+          details: authError?.message,
+        },
+        401,
+      );
     }
 
     // 4) Verificar que el usuario autenticado tenga perfil interno antes de exponer
@@ -67,10 +74,14 @@ serve(async (req) => {
       .single();
 
     if (profileError || !profile?.is_internal) {
-      return new Response(JSON.stringify({ error: profileError?.message || "El perfil no es interno" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "El perfil no es interno",
+          error_key: "listProfiles.notInternal",
+          details: profileError?.message,
+        },
+        403,
+      );
     }
 
     // 5) Obtener todos los perfiles ordenados por fecha de creacion descendente
@@ -81,26 +92,26 @@ serve(async (req) => {
       .order("created_at", { ascending: false });
 
     if (profilesError) {
-      return new Response(JSON.stringify({ error: profilesError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "No se pudieron cargar los perfiles",
+          error_key: "listProfiles.loadError",
+          details: profilesError.message,
+        },
+        400,
+      );
     }
 
-    return new Response(JSON.stringify(profiles), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return jsonResponse(profiles ?? [], 200);
   } catch (error) {
     // Captura errores no controlados para evitar exponer stack traces al cliente.
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Ocurrio un error inesperado",
-      }),
+    return jsonResponse(
       {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        error: "Error interno del servidor",
+        error_key: "listProfiles.internalError",
+        details: error instanceof Error ? error.message : "Ocurrio un error inesperado",
       },
+      500,
     );
   }
 });

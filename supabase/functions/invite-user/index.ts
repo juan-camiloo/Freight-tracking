@@ -14,6 +14,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -25,10 +31,10 @@ serve(async (req) => {
       req.headers.get("authorization") ?? req.headers.get("Authorization");
 
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Falta el encabezado de autorizacion" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Falta el encabezado de autorizacion", error_key: "inviteUser.authHeaderMissing" },
+        401,
+      );
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
@@ -47,20 +53,24 @@ serve(async (req) => {
     } = await supabaseAuth.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Token o sesion invalida" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "Token o sesion invalida",
+          error_key: "inviteUser.invalidSession",
+          details: authError?.message,
+        },
+        401,
+      );
     }
 
     // 3) Extraer datos de la invitacion enviados por el frontend.
     const { email, is_internal, nickname } = await req.json();
 
     if (!email) {
-      return new Response(JSON.stringify({ error: "Email requerido" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "Email requerido", error_key: "inviteUser.emailRequired" },
+        400,
+      );
     }
 
     // 4) Cliente service role para acciones administrativas como invitar usuarios
@@ -79,10 +89,10 @@ serve(async (req) => {
       .single();
 
     if (profileFetchError || !profile?.is_internal) {
-      return new Response(JSON.stringify({ error: "No autorizado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        { error: "No autorizado", error_key: "inviteUser.notAuthorized" },
+        403,
+      );
     }
 
     // 6) Enviar invitacion por email. Un trigger de BD crea automaticamente
@@ -94,13 +104,15 @@ serve(async (req) => {
     });
 
     if (error) {
-      return new Response(JSON.stringify({
-        error: error.message,
-        code: error.code,
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(
+        {
+          error: "No se pudo enviar la invitacion",
+          error_key: "inviteUser.inviteError",
+          details: error.message,
+          code: error.code,
+        },
+        400,
+      );
     }
 
     // 7) Espera minima para que el trigger de BD finalice antes de intentar
@@ -122,22 +134,19 @@ serve(async (req) => {
       console.error("Error al actualizar perfil:", updateError);
     }
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       user: { id: data.user.id, email: data.user.email },
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     // Captura errores no controlados para evitar exponer stack traces al cliente.
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }),
+    return jsonResponse(
       {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        error: "Error interno del servidor",
+        error_key: "inviteUser.internalError",
+        details: error instanceof Error ? error.message : "Error desconocido",
       },
+      500,
     );
   }
 });

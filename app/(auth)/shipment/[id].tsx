@@ -219,7 +219,7 @@ export default function ShipmentDetail() {
       const response = await fetch(asset.uri);
       const blob = await response.blob();
 
-      const safeName = (asset.name || 'documento').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeName = (asset.name || t('shipmentDetail.defaultDocumentName')).replace(/[^a-zA-Z0-9._-]/g, '_');
       const objectPath = `${shipmentId}/${Date.now()}_${safeName}`;
 
       const { data: uploaded, error: uploadError } = await supabase.storage
@@ -248,7 +248,9 @@ export default function ShipmentDetail() {
 
       if (insertError) {
         try {
-          await supabase.storage.from('documents').remove([uploaded.path]);
+          await supabase.storage
+          .from('documents')
+          .remove([uploaded.path]);
         } catch {
           // no-op
         }
@@ -296,7 +298,11 @@ export default function ShipmentDetail() {
 
     const { data: objects, error } = await supabase.storage
       .from('documents')
-      .list(shipmentId, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+      .list(shipmentId, { 
+        limit: 100, sortBy: { 
+          column: 'created_at', order: 'desc' 
+        } 
+      });
 
     if (error || !objects?.length) return null;
 
@@ -327,7 +333,7 @@ export default function ShipmentDetail() {
 
       const canOpen = await Linking.canOpenURL(data.signedUrl);
       if (!canOpen) {
-        throw new Error('El dispositivo no puede abrir este documento');
+        throw new Error(t('shipmentDetail.cannotOpenDocument'));
       }
 
       await Linking.openURL(data.signedUrl);
@@ -372,6 +378,31 @@ export default function ShipmentDetail() {
     ? Number.isNaN(Date.parse(shipment.documentary_cutoff))
       ? shipment.documentary_cutoff
       : new Date(shipment.documentary_cutoff).toLocaleString()
+    : '';
+
+  const bookingStatusValue = shipment.booking_status?.toLowerCase() ?? '';
+  const inspectionStatusValue = shipment.inspection_status?.toLowerCase() ?? '';
+  const showBookingStatus = Boolean(bookingStatusValue && bookingStatusValue !== 'pending');
+  const showInspectionStatus = Boolean(inspectionStatusValue && inspectionStatusValue !== 'none');
+  const bookingStatusLabel = showBookingStatus
+    ? t(`shipmentForm.options.bookingStatus.${bookingStatusValue}`, { defaultValue: shipment.booking_status ?? '' })
+    : '';
+  const inspectionStatusLabel = showInspectionStatus
+    ? t(`shipmentForm.options.inspectionStatus.${inspectionStatusValue}`, { defaultValue: shipment.inspection_status ?? '' })
+    : '';
+
+  const shipmentTypeKeyMap: Record<string, string> = {
+    Aereo: 'air',
+    Maritimo: 'sea',
+    Terrestre: 'land',
+  };
+  const shipmentTypeKey = shipment.shipment_type ? shipmentTypeKeyMap[shipment.shipment_type] : '';
+  const shipmentTypeLabel = shipmentTypeKey
+    ? t(`shipmentForm.options.shipmentType.${shipmentTypeKey}`, { defaultValue: shipment.shipment_type })
+    : shipment.shipment_type;
+  const cargoTypeValue = shipment.cargo_type?.toLowerCase() ?? '';
+  const cargoTypeLabel = cargoTypeValue
+    ? t(`shipmentForm.options.cargoType.${cargoTypeValue}`, { defaultValue: shipment.cargo_type ?? '' })
     : '';
 
   return (
@@ -419,7 +450,7 @@ export default function ShipmentDetail() {
           {shipment.tracking_number && (
             <InfoRow label={t('shipmentDetail.labels.trackingNumber')} value={shipment.tracking_number} />
           )}
-          <InfoRow label={t('shipmentDetail.labels.via')} value={shipment.shipment_type} />
+          <InfoRow label={t('shipmentDetail.labels.via')} value={shipmentTypeLabel} />
           <InfoRow label={t('shipmentDetail.labels.origin')} value={shipment.origin} />
           <InfoRow label={t('shipmentDetail.labels.destination')} value={shipment.destination} />
           <InfoRow label={t('shipmentDetail.labels.etd')} value={shipment.etd || ''} />
@@ -428,17 +459,16 @@ export default function ShipmentDetail() {
             <InfoRow label={t('shipmentDetail.labels.documentaryCutoff')} value={documentaryCutoff} />
           )}
           {shipment.incoterm && <InfoRow label={t('shipmentDetail.labels.incoterm')} value={shipment.incoterm} />}
-          {shipment.cargo_type && <InfoRow label={t('shipmentDetail.labels.cargoType')} value={shipment.cargo_type} />}
+          {cargoTypeLabel && <InfoRow label={t('shipmentDetail.labels.cargoType')} value={cargoTypeLabel} />}
           {shipment.free_days !== null && shipment.free_days !== undefined && (
             <InfoRow label={t('shipmentDetail.labels.freeDays')} value={String(shipment.free_days)} />
           )}
-          {shipment.booking_status && (
-            <InfoRow label={t('shipmentDetail.labels.bookingStatus')} value={shipment.booking_status} />
+          {showBookingStatus && (
+            <InfoRow label={t('shipmentDetail.labels.bookingStatus')} value={bookingStatusLabel} />
           )}
-          {shipment.inspection_status && (
-            <InfoRow label={t('shipmentDetail.labels.inspectionStatus')} value={shipment.inspection_status} />
+          {showInspectionStatus && (
+            <InfoRow label={t('shipmentDetail.labels.inspectionStatus')} value={inspectionStatusLabel} />
           )}
-          {shipment.status && <InfoRow label={t('shipmentDetail.labels.recordStatus')} value={shipment.status} />}
           <InfoRow label={t('shipmentDetail.labels.status')} value={shipment.current_status || ''} />
           <InfoRow label={t('shipmentDetail.labels.location')} value={shipment.current_location || ''} />
           <InfoRow label={t('shipmentDetail.labels.exporter')} value={shipment.exporter || ''} />
