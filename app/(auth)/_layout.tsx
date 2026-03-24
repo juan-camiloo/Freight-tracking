@@ -16,8 +16,6 @@ export default function AuthLayout() {
     // Flag para evitar actualizaciones de estado en componentes desmontados
     // si la promesa de getSession resuelve despues de una navegacion.
     let mounted = true;
-    let isInitialLoad = true;
-
     supabase.auth.getSession().then(({ data: { session } }) => {
         console.log('[AuthLayout] getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
 
@@ -49,15 +47,10 @@ export default function AuthLayout() {
       // para evitar que el token quede asociado a un user_id incorrecto.
       
       if(event === 'INITIAL_SESSION' ){
-        isInitialLoad=false;
         return;
       }
       if(event === 'SIGNED_IN' && session?.user?.id){
         void registerCurrentDevicePushToken(session.user.id)
-        if (!isInitialLoad){
-          router.replace('/')
-        }
-        isInitialLoad=false
       }
       if (event === 'TOKEN_REFRESHED' && session?.user?.id){
         void registerCurrentDevicePushToken(session.user.id)
