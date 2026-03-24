@@ -30,7 +30,7 @@
       "package": "com.ingelox26.freighttracking"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
