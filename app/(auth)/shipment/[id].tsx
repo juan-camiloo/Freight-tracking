@@ -233,39 +233,29 @@ export default function ShipmentDetail() {
         throw uploadError || new Error(t('shipmentDetail.uploadError'));
       }
 
-      const baseInsert = {
-        shipment_id: shipmentId,
-        file_name: asset.name || safeName,
-        file_size: asset.size ?? 0,
-        file_path: uploaded.path,
-      };
-
       const { data: insertedDoc, error: insertError } = await supabase
-        .from('documents')
-        .insert(baseInsert)
-        .select('*')
-        .single();
+  .from('documents')
+  .insert({
+    shipment_id: shipmentId,
+    file_name: asset.name || safeName,
+    file_size: asset.size ?? 0,
+    file_path: uploaded.path,
+    storage_path: uploaded.path,
+    uploaded_by: userId,
+  })
+  .select('*')
+  .single();
 
-      if (insertError) {
-        try {
-          await supabase.storage
-          .from('documents')
-          .remove([uploaded.path]);
-        } catch {
-          // no-op
-        }
-        throw insertError;
-      }
-
-      if (insertedDoc?.id) {
-        await supabase
-          .from('documents')
-          .update({
-            storage_path: uploaded.path,
-            uploaded_by: userId,
-          })
-          .eq('id', insertedDoc.id);
-      }
+if (insertError) {
+  try {
+    await supabase.storage
+    .from('documents')
+    .remove([uploaded.path]);
+  } catch {
+    // no-op
+  }
+  throw insertError;
+}
 
       setDocuments((prev) => [
         ...prev,
@@ -289,27 +279,8 @@ export default function ShipmentDetail() {
   };
 
   // Resuelve el path real del archivo en Storage.
-  const resolveStoragePath = async (doc: Document) => {
-    if (doc.file_path) return doc.file_path;
-    if (doc.storage_path) return doc.storage_path;
-
-    const shipmentId = String(id ?? '');
-    if (!shipmentId) return null;
-
-    const { data: objects, error } = await supabase.storage
-      .from('documents')
-      .list(shipmentId, { 
-        limit: 100, sortBy: { 
-          column: 'created_at', order: 'desc' 
-        } 
-      });
-
-    if (error || !objects?.length) return null;
-
-    const safeName = doc.file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const match = objects.find((item) => item.name === safeName || item.name.endsWith(`_${safeName}`));
-
-    return match ? `${shipmentId}/${match.name}` : null;
+  const resolveStoragePath = (doc: Document) => {
+    return doc.storage_path ?? doc.file_path ?? null;
   };
 
   // Genera URL firmada y abre el documento.
