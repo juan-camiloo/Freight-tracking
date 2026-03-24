@@ -129,7 +129,7 @@ export default function ShipmentDetail() {
         .maybeSingle();
 
       const assignedToUser = Boolean(relationData);
-
+      console.log('relationData:', relationData, 'userId:', user.id, 'shipmentId:', id);
       if (assignedToUser || profile?.is_internal) {
         const { data: updatesData } = await supabase
           .from('shipment_updates')
