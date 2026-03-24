@@ -266,7 +266,10 @@ import { listTicketsFunctionUrl, supabase, supabaseAnonKey, updateTicketFunction
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionButtonPrimary, updating && styles.actionButtonDisabled]}
-                    onPress={() => updateStatus('resolved')}
+                    onPress={() => {
+                      router.replace('/supportInbox')
+                      updateStatus('resolved')
+                    }}
                     disabled={Boolean(updating)}
                   >
                     <Text style={styles.actionButtonPrimaryText}>

@@ -100,6 +100,7 @@ serve(async (req) => {
     const { data, error } = await supabase.auth.admin.createUser({
       email: email,
       email_confirm: true,
+      password: crypto.randomUUID(),
       user_metadata: {
         nickname: nickname || null,
       },
