@@ -3,6 +3,7 @@ Pantalla principal. Lista cargas, permite buscar cargas por DO, origen o destino
 y en caso de usuario interno, muestra acciones de administracion.
 */
 
+import i18n, { setAppLanguage } from '@/i18n';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -111,6 +112,10 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+  const toggleLanguage = async ()=> {
+    const next = i18n.language === 'es' ? 'en' : 'es';
+    await setAppLanguage (next as 'es' | 'en')
+  }
 
   // Busqueda flexible: acepta coincidencias parciales en DO, origen o destino.
   // ilike garantiza busqueda case-insensitive sin transformar el query en cliente.
@@ -164,9 +169,24 @@ export default function Dashboard() {
         <Text style={styles.headerTitle}>
           {isInternal ? t('dashboard.headerInternal') : t('dashboard.headerExternal')}
         </Text>
-        <TouchableOpacity onPress={handleLogout} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>{t('common.logout')}</Text>
+        <View style= {styles.topActions}>
+        <TouchableOpacity onPress={toggleLanguage} >
+          <Text style={styles.topActionText}>es/en</Text>
         </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={handleLogout}   
+          style={{ minWidth: 60, alignItems: 'center' }}
+        >
+          <Text 
+            style={styles.topActionText} 
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            onLayout={(e) => console.log('Logout width:', e.nativeEvent.layout.width)}
+            >
+            {t('common.logout')}
+            </Text>
+        </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -225,8 +245,17 @@ export default function Dashboard() {
             <Text style={styles.fabAssistantText}>{t('dashboard.fabTickets')}</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/chat')}>
-            <Text style={styles.fabAssistantText}>{t('dashboard.fabAssistant')}</Text>
+          <TouchableOpacity style={styles.fabAssistant} 
+            onPress={() => router.push('/chat')}
+            onLayout={(e) => console.log('FAB width:', e.nativeEvent.layout.width)}
+          >
+            <Text 
+              style={styles.fabAssistantText} 
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('dashboard.fabAssistant')}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -274,7 +303,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.orange,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
+    overflow: 'visible'
   },
+  
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -282,8 +313,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  topActionContainer: { position: 'absolute', right: 16, top: 25 },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  topActions: {
+    position: 'absolute',
+    right: 16,
+    top: 30,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    minWidth: 100
+  },
+  topActionText: { 
+    color: '#1B2A3A', 
+    fontSize: 16, 
+    fontWeight: '600', 
+    padding: 6,
+    lineHeight: 30,
+  },
   searchContainer: {
     flexDirection: 'row',
     paddingTop: 16,
@@ -319,23 +364,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 35,
     bottom: 15,
-    width: 100,
+    minWidth: 100,
     height: 45, 
     borderRadius: 10,
     backgroundColor: COLORS.blue,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
+    paddingHorizontal: 12,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
     shadowRadius: 8,
+    overflow: 'visible'
   },
   fabAssistantText: {
     color: COLORS.cream,
     fontWeight: '700',
-    left: 2,
   },
   actionRow: { flexDirection: 'row', gap: 10 },
   actionHalf: { flex: 1 },

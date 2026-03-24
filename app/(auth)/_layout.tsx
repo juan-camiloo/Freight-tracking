@@ -23,7 +23,9 @@ export default function AuthLayout() {
       if (!session) {
         // Sin sesion activa, redirigir al login antes de mostrar cualquier ruta privada.
         router.replace('/login');
-      } else {
+        return;
+      } 
+      if (session?.user?.id) {
         // Con sesion valida, registrar el token push del dispositivo para recibir
         // notificaciones. Se hace aqui para cubrir el caso de reabrir la app.
         void registerCurrentDevicePushToken(session.user.id);
@@ -41,6 +43,8 @@ export default function AuthLayout() {
       // para evitar que el token quede asociado a un user_id incorrecto.
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user?.id) {
         void registerCurrentDevicePushToken(session.user.id);
+        // Redirigir al dashboard tras login exitoso o refresco de token.
+        router.replace('/');
       }
 
       // Al cerrar sesion, redirigir siempre al login independientemente

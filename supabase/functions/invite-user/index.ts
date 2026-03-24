@@ -97,11 +97,13 @@ serve(async (req) => {
 
     // 6) Enviar invitacion por email. Un trigger de BD crea automaticamente
     // el perfil base al insertarse el usuario en auth.users.
-    const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-      data: {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: email,
+      email_confirm: true,
+      user_metadata: {
         nickname: nickname || null,
       },
-    });
+    })
 
     if (error) {
       return jsonResponse(

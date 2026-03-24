@@ -1,7 +1,9 @@
 // Archivo: C:\Users\usuario\freight-tracking\lib\supabase.ts
 // Descripcion: Este archivo forma parte de la logica principal de la aplicacion.
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { Platform } from 'react-native'
 
 export const supabaseUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co'
 export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtemFmcGtybXloeGJ2eW1kamd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NDQxNjAsImV4cCI6MjA4NTAyMDE2MH0.RUlK8QD8OOTF0NLkr7EnhH_p9CRI5E7j7o1TQpNEa1w'
@@ -14,11 +16,18 @@ export const inviteUserFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/f
 export const createTicketFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/createTicket' 
 export const updateTicketFunctionUrl = 'https://wmzafpkrmyhxbvymdjgu.supabase.co/functions/v1/update-tickets'
 
+const getStorage =() => {
+  if (Platform.OS !== 'web') return AsyncStorage;
+  if (typeof window !=='undefined') return localStorage;
+  return undefined;
+}
 const supabaseOptions = {
   auth: {
+    storage: getStorage(),
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
+    flowType: 'pkce' as const
   },
 }
 

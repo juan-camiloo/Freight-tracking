@@ -4,8 +4,7 @@
 import { Slot } from 'expo-router';
 import '../i18n';
 
+
 export default function RootLayout() {
-  // Slot delega el render a la ruta activa; este layout no agrega
-  // UI propia para no interferir con los layouts de cada grupo de rutas.
   return <Slot />;
 }

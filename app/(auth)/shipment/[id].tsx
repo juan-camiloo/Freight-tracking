@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
   section: {
     backgroundColor: '#fff',
     margin: 10,

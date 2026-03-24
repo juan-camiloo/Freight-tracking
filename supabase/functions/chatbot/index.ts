@@ -339,6 +339,9 @@ serve(async (req) => {
     if (requestedFields.size > 0 && intent) {
       const intentFields = intent.database?.fields ?? []
       const coversAny = intentFields.some((field: string) => requestedFields.has(field))
+      console.error("requestedFields:", Array.from(requestedFields))
+console.error("intentFields:", intentFields)
+console.error("coversAny:", coversAny)
       if (!coversAny) {
         intent = null
       }
@@ -435,12 +438,21 @@ serve(async (req) => {
         });
       }
 
-    const query = supabase
+    let query = supabase
         .from(table)
         .select(safeFields.join(","))
         .eq("do_number", DO)
     let data: any = null
     let error: any = null
+    if (table === "shipments"){
+      const {data: userShipments} = await supabase
+        .from("profile_shipment")
+        .select("shipment_id")
+        .eq("client_id", user.id)
+      const shipmentIds = (userShipments ?? []).map(s=>s.shipment_id)
+      query = query.in("id",shipmentIds)
+    }
+
     if (table === "shipment_updates") {
         const result = await query.order("created_at", { ascending: false }).limit(1)
         data=result.data
@@ -453,7 +465,7 @@ serve(async (req) => {
       console.log("DATA:", JSON.stringify(data))
       console.log("ERROR:", JSON.stringify(error))
 
-      if (error || !data?.[0]) {
+      if (error || !data) {
         return jsonResponse({
           mode: "handoff",
           answer_key: "chatbot.aiNoData",
@@ -512,12 +524,29 @@ serve(async (req) => {
     let shipmentData: any = null
     const requiredFields = intent.database?.fields?.filter((f: string) => f !== "do_number") || []
     let response = intent.response_template || ""
+    console.error("requiredFields:", requiredFields)
+console.error("DO en query:", DO)
+console.error("select:", requiredFields.join(","))
+
     if (intent.requires_do) {
+      const {data: userShipments} = await supabase
+        .from("profile_shipment")
+        .select("shipment_id")
+        .eq("client_id", user.id)
+      
+      if (!userShipments || userShipments.length===0){
+        return jsonResponse ({
+          mode: "handoff",
+          answer_key: "chatbot.doNotFound",
+          answer: "No pude encontrar información para ese DO."
+        })
+      }
+      const shipmentIds = userShipments.map( s=> s.shipment_id)
       const { data, error } = await supabase
         .from("shipments")
         .select(requiredFields.join(","))
         .eq("do_number", DO)
-        .eq("client_id", user.id)
+        .in("id", shipmentIds)
         .single()
 
       if (error || !data) {

@@ -14,16 +14,21 @@
     "done": "Listo",
     "notFound": "No encontrado",
     "yes": "Sí",
-    "no" : "No"
+    "no" : "No",
+    "verifying": "Verificando..."
+
   },
   "login": {
-    "headerTitle": "Iniciar sesion",
-    "title": "Bienvenido",
-    "subtitle": "Ingrese el correo con el cual fue registrado",
-    "emailPlaceholder": "usuario@email.com",
-    "sendMagicLink": "Enviar link de autenticacion",
-    "missingEmail": "Por favor ingresa tu email",
-    "checkEmail": "Revisa tu email para el magic link"
+  "headerTitle": "Iniciar sesion",
+  "title": "Bienvenido",
+  "subtitle": "Ingrese el correo con el cual fue registrado",
+  "emailPlaceholder": "usuario@email.com",
+  "sendCode": "Enviar código",
+  "missingEmail": "Por favor ingresa tu email",
+  "missingCode": "Por favor ingresa el código",
+  "enterCode": "Ingresa el código de 6 dígitos que enviamos a tu correo",
+  "verify": "Verificar",
+  "changeEmail": "Cambiar correo"
   },
   "dashboard": {
     "headerInternal": "Cargas Vigentes",

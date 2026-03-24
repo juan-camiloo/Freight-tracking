@@ -10,20 +10,24 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "logout": "Log out",
+    "logout": "Logout",
     "done": "Done",
     "notFound": "Not found",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "verifying": "verifying..."
   },
   "login": {
     "headerTitle": "Sign in",
     "title": "Welcome",
-    "subtitle": "Enter the email address used for your registration",
+    "subtitle": "Enter the email you were registered with",
     "emailPlaceholder": "user@email.com",
-    "sendMagicLink": "Send authentication link",
+    "sendCode": "Send code",
     "missingEmail": "Please enter your email",
-    "checkEmail": "Check your email for the magic link"
+    "missingCode": "Please enter the code",
+    "enterCode": "Enter the 6-digit code we sent to your email",
+    "verify": "Verify",
+    "changeEmail": "Change email"
   },
   "dashboard": {
     "headerInternal": "Active Shipments",
@@ -152,7 +156,7 @@
     "assignError": "Could not assign shipment"
   },
   "chat": {
-    "headerTitle": "AI Assistant",
+    "headerTitle": "Assistant",
     "welcome": "Hi, I am your cargo assistant. Do you have a DO number? If your question is not about a specific cargo, tell me your question.",
     "recommendationsTitle": "Suggestions",
     "recommendationEta": "What is the ETA of my x12345?",

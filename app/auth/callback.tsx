@@ -4,103 +4,88 @@
 // - code para exchangeCodeForSession
 // - token_hash + type para verifyOtp (magic link)
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function AuthCallback() {
-  const currentUrl = Linking.useURL();
-  const params = useLocalSearchParams<{
-    token_hash?: string | string[];
-    type?: string | string[];
-    code?: string | string[];
-  }>();
-
   useEffect(() => {
-    const run = async () => {
+    const processUrl = async (url: string | null) => {
+      if (!url){
+        console.log("Sin URL recibida");
+        return;
+      }
+        if (url.includes('expo-development-client')) {
+          console.log("URL de dev client ignorada:", url);
+          return;
+        }
+      console.log("URL RECIBIDA: ", url);
       try {
         // Normalizamos params porque expo-router puede entregar string | string[].
-        const tokenHashParam = Array.isArray(params.token_hash) ? params.token_hash[0] : params.token_hash;
-        const typeParam = Array.isArray(params.type) ? params.type[0] : params.type;
-        const codeParam = Array.isArray(params.code) ? params.code[0] : params.code;
+        const parsed = Linking.parse(url);
+        const queryParams= parsed.queryParams || {};
+        const fragment = url.split('#')[1]||'';
+        const fragmentParams = new URLSearchParams (fragment);
+        const normalize = (v: unknown) =>
+          Array.isArray(v) ? v[0] ?? null : (v as string | null) ?? null;
 
+        const token_hash = normalize(queryParams.token_hash) ?? fragmentParams.get ('token_hash');
+        const type = normalize(queryParams.type) ?? fragmentParams.get('type')?? 'email';
+        const code =  normalize(queryParams.code) ??  fragmentParams.get('code');
+
+        console.log("parseado:", parsed);
+        console.log("queryParams:", queryParams);
+        console.log("fragment:", fragment);
+        console.log("fragmentParams:", fragmentParams);
+        console.log ("token_hash: ", token_hash);
+        console.log ("type: ", type);
+        console.log ("conde: ", code);
+
+        if (token_hash){
+          const {error} = await supabase.auth.verifyOtp({
+            token_hash: String(token_hash),
+            type: type as any
+          });
+          if (error) throw error
+        }else if (code){
+          const {error}= await supabase.auth.exchangeCodeForSession(String(code));
+          if (error) throw error;
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
         // Si la sesion ya existe, evitamos reprocesar la URL.
         const {
-          data: { session: existingSession },
+          data: { session: existingSession }
         } = await supabase.auth.getSession();
-        if (existingSession) {
-          return router.replace('/');
-        }
+        
+        console.log("SESSION", existingSession)
 
-        // Obtenemos URL inicial y contemplamos retraso de deep link en Expo Go.
-        let url = (await Linking.getInitialURL()) ?? currentUrl;
-        if (!url && !tokenHashParam && !typeParam) {
-          // Expo Go puede entregar el deep link con retraso tras volver desde el navegador.
-          await new Promise((resolve) => setTimeout(resolve, 1200));
-          url = (await Linking.getInitialURL()) ?? currentUrl;
-        }
+        router.replace(existingSession ? '/' : '/login');
 
-        // Leemos tanto query params como fragment (#) para cubrir todos los providers.
-        const [base, hash = ''] = (url ?? '').split('#');
-        const parsed = base ? Linking.parse(base) : { queryParams: {} };
-        const qp = (parsed.queryParams ?? {}) as Record<string, string | string[]>;
-        const hp = new URLSearchParams(hash);
-
-        const access_token = hp.get('access_token') ?? (qp.access_token ? String(qp.access_token) : null);
-        const refresh_token = hp.get('refresh_token') ?? (qp.refresh_token ? String(qp.refresh_token) : null);
-        const code = codeParam ?? (qp.code ? String(qp.code) : null);
-
-        // Caso 1: tokens directos.
-        if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (!error) {
-            const {
-              data: { session: afterSetSession },
-            } = await supabase.auth.getSession();
-            return router.replace(afterSetSession ? '/' : '/login');
-          }
-        }
-
-        // Caso 2: codigo de autorizacion.
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (!error) {
-            const {
-              data: { session: afterExchangeSession },
-            } = await supabase.auth.getSession();
-            return router.replace(afterExchangeSession ? '/' : '/login');
-          }
-        }
-
-        // Caso 3: token hash (OTP / magic link).
-        const token_hash = tokenHashParam ?? (qp.token_hash ? String(qp.token_hash) : null);
-        const type = typeParam ?? (qp.type ? String(qp.type) : null);
-
-        if (token_hash && type) {
-          const normalizedType = type;
-          const { error } = await supabase.auth.verifyOtp({ token_hash, type: normalizedType as any });
-          if (!error) {
-            const {
-              data: { session: afterVerifySession },
-            } = await supabase.auth.getSession();
-            return router.replace(afterVerifySession ? '/' : '/login');
-          }
-          console.error('verifyOtp failed:', error?.message);
-        }
-
-        const {
-          data: { session: finalSession },
-        } = await supabase.auth.getSession();
-        router.replace(finalSession ? '/' : '/login');
       } catch (error) {
         console.error('Auth callback error:', error);
         router.replace('/login');
       }
     };
 
-    run();
-  }, [currentUrl, params.token_hash, params.type, params.code]);
+    let cancelled = false;
+
+  const init = async () => {
+    const rawUrl = await Linking.getInitialURL();
+    if (!cancelled) await processUrl(rawUrl);
+  };
+
+  const timer = setTimeout(init, 800);
+    const subscription = Linking.addEventListener('url', ({ url }) =>{
+      processUrl (url)
+    })
+    return ()=> {
+      cancelled= true;
+      clearTimeout(timer);
+      subscription.remove()
+    }
+  }, []);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

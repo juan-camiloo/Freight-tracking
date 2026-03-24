@@ -621,7 +621,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
+    minWidth: 60,
   },
   sendButtonDisabled: { opacity: 0.6 },
-  sendButtonText: { color: COLORS.blueDark, fontWeight: '700' },
+  sendButtonText: { color: COLORS.blueDark, fontWeight: '700', includeFontPadding: false,  },
 });

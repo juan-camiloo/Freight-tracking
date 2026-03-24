@@ -11,6 +11,15 @@
       "supportsTablet": true
     },
     "android": {
+      "intentFilters": [{
+        "action": "VIEW",
+        "autoVerify": true,
+        "data":[{
+            "scheme": "freighttracking"
+          }
+        ],
+        "category":["BROWSABLE", "DEFAULT"]
+      }],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

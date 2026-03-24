@@ -5,7 +5,9 @@
   "scripts": {
     "start": "expo start",
     "lint": "eslint app components hooks lib constants i18n --ext .ts,.tsx,.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

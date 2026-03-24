@@ -1,13 +1,14 @@
 // Archivo: app/login.tsx
 /*
-Pantalla de acceso por magic link.
-Solo permite solicitar OTP para correos registrados por usuarios internos.
+Pantalla de acceso por OTP de 6 dígitos.
+Solo permite solicitar código para correos registrados por usuarios internos.
+Flujo: paso 1 → ingresa correo → paso 2 → ingresa código de 6 dígitos
 */
 
-import * as Linking from 'expo-linking';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../components/LogoCorner';
 import { supabase } from '../lib/supabase';
 
@@ -25,45 +26,61 @@ const COLORS = {
 export default function Login() {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  // Controla en qué paso del flujo está el usuario.
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
 
-  function getRedirectTo() {
-    // En web se usa la URL del navegador como base del deep link de retorno.
-    // En nativo se usa el scheme personalizado para que el SO reabra la app.
-    if (Platform.OS === 'web') {
-      return Linking.createURL('/auth/callback');
-    }
-    const nativeUrl = Linking.createURL('auth/callback', { scheme: 'freighttracking' });
-    return nativeUrl;
-  }
-
-  const handleLogin = async () => {
+  // Paso 1: envía el código OTP al correo del usuario.
+  // shouldCreateUser: false garantiza que solo usuarios ya invitados
+  // puedan solicitar el código; rechaza correos no registrados.
+  const handleSendCode = async () => {
     if (!email) {
       Alert.alert(t('common.error'), t('login.missingEmail'));
       return;
     }
-
     setLoading(true);
-
-    const redirectTo = getRedirectTo();
-
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        // shouldCreateUser: false garantiza que solo usuarios ya invitados
-        // puedan solicitar magic link; rechaza correos no registrados.
-        shouldCreateUser: false,
-        emailRedirectTo: redirectTo,
-      },
+      options: { shouldCreateUser: false },
     });
-
     setLoading(false);
-
     if (error) {
       Alert.alert(t('common.error'), error.message);
     } else {
-      Alert.alert(t('common.success'), t('login.checkEmail'));
+      // Código enviado exitosamente, pasa al paso 2.
+      setStep('code');
     }
+  };
+
+  // Paso 2: verifica el código OTP ingresado por el usuario.
+  // Si es válido, Supabase establece la sesión automáticamente
+  // y el auth listener del layout redirige al dashboard.
+  const handleVerifyCode = async () => {
+    if (!code) {
+      Alert.alert(t('common.error'), t('login.missingCode'));
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    });
+    setLoading(false);
+    if (!error){
+      const {data: {session}}= await supabase.auth.getSession();
+      if (session){
+        console.log("sesion activa")
+        router.replace('/');
+      }
+    }
+    console.log("verifyOtp error:", error)
+    console.log("verifyOtp success:", !error)
+    if (error) {
+      Alert.alert(t('common.error'), error.message);
+    }
+    // Si no hay error, el auth listener redirige automáticamente.
   };
 
   return (
@@ -79,26 +96,53 @@ export default function Login() {
 
       <View style={styles.content}>
         <Text style={styles.title}>{t('login.title')}</Text>
-        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
+        <Text style={styles.subtitle}>
+          {step === 'email' ? t('login.subtitle') : t('login.enterCode')}
+        </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder={t('login.emailPlaceholder')}
-          placeholderTextColor={COLORS.placeholder}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          returnKeyType="done"
-          // Permite enviar el formulario desde el teclado sin tocar el boton.
-          onSubmitEditing={handleLogin}
-        />
-
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-          <Text style={styles.buttonText}>
-            {loading ? t('common.sending') : t('login.sendMagicLink')}
-          </Text>
-        </TouchableOpacity>
+        {step === 'email' ? (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder={t('login.emailPlaceholder')}
+              placeholderTextColor={COLORS.placeholder}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              returnKeyType="done"
+              onSubmitEditing={handleSendCode}
+            />
+            <TouchableOpacity style={styles.button} onPress={handleSendCode} disabled={loading}>
+              <Text style={styles.buttonText}>
+                {loading ? t('common.sending') : t('login.sendCode')}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="000000"
+              placeholderTextColor={COLORS.placeholder}
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              returnKeyType="done"
+              onSubmitEditing={handleVerifyCode}
+            />
+            <TouchableOpacity style={styles.button} onPress={handleVerifyCode} disabled={loading}>
+              <Text style={styles.buttonText}>
+                {loading ? t('common.verifying') : t('login.verify')}
+              </Text>
+            </TouchableOpacity>
+            {/* Permite volver al paso 1 para cambiar el correo. */}
+            <TouchableOpacity onPress={() => { setStep('email'); setCode(''); }} style={styles.backLink}>
+              <Text style={styles.backLinkText}>{t('login.changeEmail')}</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -183,5 +227,14 @@ const styles = StyleSheet.create({
     width: '100%',
     lineHeight: 22,
     flexShrink: 1,
+  },
+  backLink: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  backLinkText: {
+    color: COLORS.blueMid,
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });
