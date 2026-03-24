@@ -16,6 +16,7 @@ export default function AuthLayout() {
     // Flag para evitar actualizaciones de estado en componentes desmontados
     // si la promesa de getSession resuelve despues de una navegacion.
     let mounted = true;
+    let isInitialLoad = true;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
         console.log('[AuthLayout] getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
@@ -32,6 +33,7 @@ export default function AuthLayout() {
         // notificaciones. Se hace aqui para cubrir el caso de reabrir la app.
         void registerCurrentDevicePushToken(session.user.id);
       }
+      console.log('[AuthLayout] setCheckingSession(false)'); // agregar
 
       setCheckingSession(false);
     });
@@ -45,10 +47,17 @@ export default function AuthLayout() {
 
       // Re-registrar token en login nuevo o cuando Supabase refresca el JWT
       // para evitar que el token quede asociado a un user_id incorrecto.
-      if (event === 'SIGNED_IN' && session?.user?.id) {
-        void registerCurrentDevicePushToken(session.user.id);
-        // Redirigir al dashboard tras login exitoso o refresco de token.
-        router.replace('/');
+      
+      if(event === 'INITIAL_SESSION' ){
+        isInitialLoad=false;
+        return;
+      }
+      if(event === 'SIGNED_IN' && session?.user?.id){
+        void registerCurrentDevicePushToken(session.user.id)
+        if (!isInitialLoad){
+          router.replace('/')
+        }
+        isInitialLoad=false
       }
       if (event === 'TOKEN_REFRESHED' && session?.user?.id){
         void registerCurrentDevicePushToken(session.user.id)
