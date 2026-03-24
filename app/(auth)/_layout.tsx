@@ -18,6 +18,8 @@ export default function AuthLayout() {
     let mounted = true;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+        console.log('[AuthLayout] getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
+
       if (!mounted) return;
 
       if (!session) {
@@ -39,6 +41,8 @@ export default function AuthLayout() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+        console.log('[AuthLayout] onAuthStateChange event:', event, 'session:', session ? 'HAS SESSION' : 'NO SESSION');
+
       // Re-registrar token en login nuevo o cuando Supabase refresca el JWT
       // para evitar que el token quede asociado a un user_id incorrecto.
       if (event === 'SIGNED_IN' && session?.user?.id) {
