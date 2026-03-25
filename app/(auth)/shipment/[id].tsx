@@ -363,9 +363,9 @@ if (insertError) {
     : '';
 
   const shipmentTypeKeyMap: Record<string, string> = {
-    Aereo: 'air',
-    Maritimo: 'sea',
-    Terrestre: 'land',
+    air: 'air',
+    maritime: 'sea',
+    land: 'land',
   };
   const shipmentTypeKey = shipment.shipment_type ? shipmentTypeKeyMap[shipment.shipment_type] : '';
   const shipmentTypeLabel = shipmentTypeKey
