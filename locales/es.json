@@ -294,13 +294,13 @@
         "pending": "Pendiente",
         "confirmed": "Confirmada",
         "rejected": "Rechazada",
-        "cancelled": "Cancelada"
+        "waiting_carrier": "Esperando transportadora"
       },
       "inspectionStatus": {
         "none": "Ninguna",
         "documentary": "Documental",
         "physical": "Fisica",
-        "customs": "Aduana"
+        "released": "Liberada"
       }
     }
   },

@@ -24,9 +24,9 @@ const COLORS = {
 };
 
 const SHIPMENT_TYPES = [
-  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'Aereo' },
-  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'Maritimo' },
-  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'Terrestre' },
+  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'air' },
+  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'maritime' },
+  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'land' },
 ];
 
 const INCOTERMS = [
@@ -55,14 +55,14 @@ const BOOKING_STATUSES = [
   { labelKey: 'shipmentForm.options.bookingStatus.pending', value: 'pending' },
   { labelKey: 'shipmentForm.options.bookingStatus.confirmed', value: 'confirmed' },
   { labelKey: 'shipmentForm.options.bookingStatus.rejected', value: 'rejected' },
-  { labelKey: 'shipmentForm.options.bookingStatus.cancelled', value: 'cancelled' },
+  { labelKey: 'shipmentForm.options.bookingStatus.waiting_carrier', value: 'waiting_carrier' },
 ];
 
 const INSPECTION_STATUSES = [
   { labelKey: 'shipmentForm.options.inspectionStatus.none', value: 'none' },
   { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
   { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.customs', value: 'customs' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.released', value: 'released' },
 ];
 
 type DateField = 'etd' | 'eta' | 'documentaryCutoff';

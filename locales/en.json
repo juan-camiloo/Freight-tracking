@@ -283,13 +283,13 @@
         "pending": "Pending",
         "confirmed": "Confirmed",
         "rejected": "Rejected",
-        "cancelled": "Cancelled"
+        "waiting_carrier": "Waiting carrier"
       },
       "inspectionStatus": {
         "none": "None",
         "documentary": "Documentary",
         "physical": "Physical",
-        "customs": "Customs"
+        "released": "Released"
       }
     }
   },
