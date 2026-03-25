@@ -48,7 +48,7 @@ const CARGO_TYPES = [
   { labelKey: 'shipmentForm.options.cargoType.dangerous', value: 'dangerous' },
   { labelKey: 'shipmentForm.options.cargoType.perishable', value: 'perishable' },
   { labelKey: 'shipmentForm.options.cargoType.refrigerated', value: 'refrigerated' },
-  { labelKey: 'shipmentForm.options.cargoType.project', value: 'project' },
+  { labelKey: 'shipmentForm.options.cargoType.chemicals', value: 'chemicals' },
 ];
 
 const BOOKING_STATUSES = [

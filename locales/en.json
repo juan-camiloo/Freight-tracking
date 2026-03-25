@@ -277,7 +277,7 @@
         "dangerous": "Dangerous",
         "perishable": "Perishable",
         "refrigerated": "Refrigerated",
-        "project": "Project"
+        "chemicals": "Medicine and chemicals"
       },
       "bookingStatus": {
         "pending": "Pending",
