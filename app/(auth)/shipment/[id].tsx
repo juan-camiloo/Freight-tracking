@@ -362,15 +362,10 @@ if (insertError) {
     ? t(`shipmentForm.options.inspectionStatus.${inspectionStatusValue}`, { defaultValue: shipment.inspection_status ?? '' })
     : '';
 
-  const shipmentTypeKeyMap: Record<string, string> = {
-    air: 'air',
-    maritime: 'sea',
-    land: 'land',
-  };
-  const shipmentTypeKey = shipment.shipment_type ? shipmentTypeKeyMap[shipment.shipment_type] : '';
-  const shipmentTypeLabel = shipmentTypeKey
-    ? t(`shipmentForm.options.shipmentType.${shipmentTypeKey}`, { defaultValue: shipment.shipment_type })
-    : shipment.shipment_type;
+  const shipmentTypeValue = shipment.shipment_type?.toLowerCase() ?? '';
+const shipmentTypeLabel = shipmentTypeValue
+  ? t(`shipmentForm.options.shipmentType.${shipmentTypeValue}`, { defaultValue: shipment.shipment_type })
+  : shipment.shipment_type;
   const cargoTypeValue = shipment.cargo_type?.toLowerCase() ?? '';
   const cargoTypeLabel = cargoTypeValue
     ? t(`shipmentForm.options.cargoType.${cargoTypeValue}`, { defaultValue: shipment.cargo_type ?? '' })
