@@ -26,9 +26,9 @@ const COLORS = {
 };
 
 const SHIPMENT_TYPES = [
-  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'Aereo' },
-  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'Maritimo' },
-  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'Terrestre' },
+  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'air' },
+  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'maritime' },
+  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'land' },
 ];
 
 const INCOTERMS = [
