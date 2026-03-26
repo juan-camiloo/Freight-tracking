@@ -190,11 +190,17 @@ export default function Profiles() {
       </View>
 
       <View style={styles.fixedHeader}>
-        <LogoCorner />
-        <Text style={styles.headerTitle}>{t('profiles.headerTitle')}</Text>
-        <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <LogoCorner inline size={120} />
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {t('profiles.headerTitle')}
+          </Text>
+          <View style={styles.topActions}>
+            <TouchableOpacity onPress={backFunction}>
+              <Text style={styles.topActionText}>{t('common.back')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -279,21 +285,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B2A3A',
     textAlign: 'center',
-    paddingBottom: 14,
   },
-  topActionContainer: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  topActions: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: 14,
+    gap: 8,
+    minWidth: 60,
   },
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
   searchContainer: {

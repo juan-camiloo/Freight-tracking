@@ -4,7 +4,7 @@
     "slug": "freight-tracking",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./visual/logo2.png",
     "scheme": "freighttracking",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -22,16 +22,16 @@
       }],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./visual/logo2.png",
+        "monochromeImage": "./visual/logo2.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.ingelox26.freighttracking"
+      "package": "com.ingelox26.freighttracking",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./visual/logo2.png"
     },
     "plugins": [
       "expo-router",

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "976132512185",
+    "project_id": "ingelox-tracking-project",
+    "storage_bucket": "ingelox-tracking-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:976132512185:android:2a75c3ef4621dd4ac1be68",
+        "android_client_info": {
+          "package_name": "com.ingelox26.freighttracking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDeSWO39kyr6L8AEbVKfg6IBNF45C-0dI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

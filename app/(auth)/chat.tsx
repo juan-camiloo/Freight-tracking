@@ -41,6 +41,8 @@ const COLORS = {
   bubbleUser: '#1E5F99',
 };
 
+const HEADER_HEIGHT = 100;
+
 // Tiempo de inactividad antes de advertir y luego cerrar el chat.
 const INACTIVITY_MS = 5 * 60 * 1000;
 
@@ -362,8 +364,8 @@ export default function ChatAssistantScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_HEIGHT : 0}
     >
       <View style={StyleSheet.absoluteFill}>
         <Image
@@ -374,11 +376,17 @@ export default function ChatAssistantScreen() {
       </View>
 
       <View style={styles.fixedHeader}>
-        <LogoCorner />
-        <Text style={styles.headerTitle}>{t('chat.headerTitle')}</Text>
-        <TouchableOpacity onPress={backFunction} style={styles.topActionContainer}>
-          <Text style={styles.topActionText}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <LogoCorner inline size={120} />
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {t('chat.headerTitle')}
+          </Text>
+          <View style={styles.topActions}>
+            <TouchableOpacity onPress={backFunction}>
+              <Text style={styles.topActionText}>{t('common.back')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -520,21 +528,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B2A3A',
     textAlign: 'center',
-    paddingBottom: 14,
   },
-  topActionContainer: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  topActions: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: 14,
+    gap: 8,
+    minWidth: 60,
   },
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
   bubble: {

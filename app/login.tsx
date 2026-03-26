@@ -90,8 +90,13 @@ export default function Login() {
       </View>
 
       <View style={styles.fixedHeader}>
-        <LogoCorner />
-        <Text style={styles.headerTitle}>{t('login.headerTitle')}</Text>
+        <View style={styles.headerRow}>
+          <LogoCorner inline size={120} />
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {t('login.headerTitle')}
+          </Text>
+          <View style={styles.headerSpacer} />
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -177,13 +182,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B2A3A',
     textAlign: 'center',
-    paddingBottom: 14,
   },
+  headerSpacer: { minWidth: 60 },
   title: {
     color: COLORS.blueDark,
     fontSize: 32,

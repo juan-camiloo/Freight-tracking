@@ -381,22 +381,26 @@ export default function EditShipment() {
       </View>
 
       <View style={styles.fixedHeader}>
-        <LogoCorner />
-        <Text style={styles.headerTitle}>{t('editShipment.headerTitle')}</Text>
-        <View style={styles.topActions}>
-          <TouchableOpacity onPress={backFunction}>
-            <Text style={styles.topActionText}>{t('common.back')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleSave} disabled={saving}>
-            <Text style={[styles.topActionText, saving && styles.disabled]}>
-              {saving ? t('editShipment.saving') : t('editShipment.save')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDelete} disabled={saving}>
-            <Text style={[styles.topActionText, styles.deleteText, saving && styles.disabled]}>
-              {t('editShipment.deleteTitle')}
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <LogoCorner inline size={120} />
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {t('editShipment.headerTitle')}
+          </Text>
+          <View style={styles.topActions}>
+            <TouchableOpacity onPress={backFunction}>
+              <Text style={styles.topActionText}>{t('common.back')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSave} disabled={saving}>
+              <Text style={[styles.topActionText, saving && styles.disabled]}>
+                {saving ? t('editShipment.saving') : t('editShipment.save')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} disabled={saving}>
+              <Text style={[styles.topActionText, styles.deleteText, saving && styles.disabled]}>
+                {t('editShipment.deleteTitle')}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -657,24 +661,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.orange,
   },
+  // Clase personalizada: fila del header con logo/titulo/acciones.
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
   // Clase personalizada: titulo del encabezado.
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B2A3A',
     textAlign: 'center',
-    paddingBottom: 14,
   },
   // Clase personalizada: fila de acciones en header.
   topActions: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingBottom: 14,
+    flexShrink: 0,
   },
   // Clase personalizada: texto de acciones superiores.
   topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
