@@ -4,7 +4,7 @@
     "slug": "freight-tracking",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./visual/logo3.jpeg",
+    "icon": "./visual/logo2.png",
     "scheme": "freighttracking",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -31,7 +31,7 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./visual/logo3.jpeg"
+      "favicon": "./visual/logo2.png"
     },
     "plugins": [
       "expo-router",
