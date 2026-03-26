@@ -669,12 +669,15 @@ const styles = StyleSheet.create({
   topActions: {
     position: 'absolute',
     right: 16,
-    top: 25,
+    top: 0,
+    bottom: 0,
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingBottom: 14,
   },
   // Clase personalizada: texto de acciones superiores.
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
   // Clase personalizada: opacidad reducida para accion deshabilitada.
   disabled: { opacity: 0.5 },
   // Clase personalizada: color de accion destructiva.

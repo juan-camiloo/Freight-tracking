@@ -301,8 +301,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingBottom: 14,
   },
-  topActionContainer: { position: 'absolute', right: 16, top: 25 },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6 },
+  topActionContainer: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 14,
+  },
+  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
   searchContainer: {
     flexDirection: 'row',
     paddingTop: 16,

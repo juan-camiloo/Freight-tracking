@@ -164,28 +164,22 @@ export default function Dashboard() {
       </View>
 
       <View style={styles.fixedHeader}>
-        <LogoCorner />
-        {/* Titulo diferenciado segun tipo de usuario para mayor claridad contextual. */}
-        <Text style={styles.headerTitle}>
-          {isInternal ? t('dashboard.headerInternal') : t('dashboard.headerExternal')}
-        </Text>
-        <View style= {styles.topActions}>
-        <TouchableOpacity onPress={toggleLanguage} >
-          <Text style={styles.topActionText}>es/en</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={handleLogout}   
-          style={{ minWidth: 60, alignItems: 'center' }}
-        >
-          <Text 
-            style={styles.topActionText} 
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            onLayout={(e) => console.log('Logout width:', e.nativeEvent.layout.width)}
-            >
-            {t('common.logout')}
-            </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <LogoCorner inline size={120} />
+          {/* Titulo diferenciado segun tipo de usuario para mayor claridad contextual. */}
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {isInternal ? t('dashboard.headerInternal') : t('dashboard.headerExternal')}
+          </Text>
+          <View style={styles.topActions}>
+            <TouchableOpacity onPress={toggleLanguage}>
+              <Text style={styles.topActionText}>es/en</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={{ minWidth: 60, alignItems: 'center' }}>
+              <Text style={styles.topActionText} numberOfLines={1} adjustsFontSizeToFit>
+                {t('common.logout')}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -305,29 +299,33 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.orange,
     overflow: 'visible'
   },
-  
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B2A3A',
     textAlign: 'center',
-    paddingBottom: 14,
   },
   topActions: {
-    position: 'absolute',
-    right: 16,
-    top: 30,
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
-    minWidth: 100
+    gap: 8,
+    minWidth: 90,
   },
   topActionText: { 
     color: '#1B2A3A', 
     fontSize: 16, 
     fontWeight: '600', 
     padding: 6,
-    lineHeight: 30,
+    includeFontPadding: false,
   },
   searchContainer: {
     flexDirection: 'row',
