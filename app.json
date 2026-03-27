@@ -4,7 +4,7 @@
     "slug": "freight-tracking",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./visual/logo2.png",
+    "icon": "./visual/icon.jpeg",
     "scheme": "freighttracking",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -22,8 +22,8 @@
       }],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./visual/logo2.png",
-        "monochromeImage": "./visual/logo2.png"
+        "foregroundImage": "./visual/icon.jpeg",
+        "monochromeImage": "./visual/icon.jpeg"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.ingelox26.freighttracking",
@@ -31,7 +31,7 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./visual/logo2.png"
+      "favicon": "./visual/favicon.png"
     },
     "plugins": [
       "expo-router",

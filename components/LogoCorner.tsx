@@ -25,7 +25,7 @@ export default function LogoCorner({ inline = false, size, height, wrapperStyle 
         style={[styles.logo, { width: resolvedSize, height: resolvedHeight }]}
         hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
       <Image
-        source={require('../visual/logo1.png')}
+        source={require('../visual/logo.png')}
         style={[styles.logo, { width: resolvedSize, height: resolvedHeight }]}  
         resizeMode="contain"
       />
