@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "freight-tracking",
+    "name": "Como va mi carga",
     "slug": "freight-tracking",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./visual/icon.jpeg",
+    "icon": "./visual/icon.png",
     "scheme": "freighttracking",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -22,8 +22,8 @@
       }],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./visual/icon.jpeg",
-        "monochromeImage": "./visual/icon.jpeg"
+        "foregroundImage": "./visual/icon.png",
+        "monochromeImage": "./visual/icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.ingelox26.freighttracking",

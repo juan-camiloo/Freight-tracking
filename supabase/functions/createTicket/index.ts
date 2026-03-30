@@ -25,7 +25,7 @@ const CATEGORY_EMAILS: Record <string, string> = {
   "pricing": "daniel@ingelox.com.co",
   "maritime": "ocean@ingelox.com.co",
   "air": "air@ingelox.com.co",
-  "other": "practicante@ingelox.com.co"
+  "other": "daniel@ingelox.com.co"
 }
 serve(async (req) => {
   if (req.method === "OPTIONS") {

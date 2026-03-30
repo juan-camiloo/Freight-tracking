@@ -30,6 +30,21 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Configura el canal de notificaciones en Android (necesario para "burbuja"/heads-up).
+async function ensureAndroidNotificationChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'Default',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#FF231F7C',
+    enableVibrate: true,
+    enableLights: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    sound: 'default',
+  });
+}
+
 // Obtiene el projectId requerido por Expo Push.
 function getExpoProjectId(): string | undefined {
   // Expo Push requiere projectId (EAS); probamos multiples fuentes.
@@ -183,6 +198,7 @@ export async function registerCurrentDevicePushToken(userId: string) {
       return;
     }
 
+    await ensureAndroidNotificationChannel();
     await registerExpoToken(userId);
   } catch (error) {
     console.error('No se pudo registrar token push:', error);
