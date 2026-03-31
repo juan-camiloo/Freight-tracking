@@ -1,7 +1,6 @@
+#!/usr/bin/env node
 // Archivo: scripts/reset-project.js
 // Descripcion: Script utilitario para reiniciar el proyecto a una estructura base.
-
-#!/usr/bin/env node
 
 /**
  * Este script reinicia el proyecto a un estado inicial.

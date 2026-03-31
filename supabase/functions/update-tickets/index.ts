@@ -6,6 +6,7 @@
 
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { Resend } from "npm:resend";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -146,6 +147,7 @@ serve(async (req) => {
         responseTicket.user_nickname = profileData.nickname ?? null;
 
         const emailClient = profileData.email;
+        const resend = new Resend(Deno.env.get("RESEND_API_KEY")!);
 
         if (status === "resolved" && profileData.email){
           const resend = new Resend (Deno.env.get("RESEND_API_KEY")!);
@@ -164,7 +166,7 @@ serve(async (req) => {
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #D7E3EE;border-radius:12px;overflow:hidden;">
                           <tr>
                             <td style="background:#F28A07;padding:20px 24px;text-align:center;">
-                              <h1 style="margin:0;font-size:22px;line-height:1.2;color:#1B2A3A;">Freight Tracking</h1>
+                              <h1 style="margin:0;font-size:22px;line-height:1.2;color:#1B2A3A;">Como va mi carga</h1>
                             </td>
                           </tr>
 
@@ -195,7 +197,7 @@ serve(async (req) => {
                             </td>
                           </tr>
                         </table>
-                        <p style="margin-top:20px; font-size:12px; color:#6B7C8F;">© 2026 Freight Tracking</p>
+                        <p style="margin-top:20px; font-size:12px; color:#6B7C8F;">© 2026 Ingelox SAS</p>
                       </td>
                     </tr>
                   </table>

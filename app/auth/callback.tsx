@@ -13,14 +13,11 @@ export default function AuthCallback() {
   useEffect(() => {
     const processUrl = async (url: string | null) => {
       if (!url){
-        console.log("Sin URL recibida");
         return;
       }
         if (url.includes('expo-development-client')) {
-          console.log("URL de dev client ignorada:", url);
           return;
         }
-      console.log("URL RECIBIDA: ", url);
       try {
         // Normalizamos params porque expo-router puede entregar string | string[].
         const parsed = Linking.parse(url);
@@ -33,14 +30,6 @@ export default function AuthCallback() {
         const token_hash = normalize(queryParams.token_hash) ?? fragmentParams.get ('token_hash');
         const type = normalize(queryParams.type) ?? fragmentParams.get('type')?? 'email';
         const code =  normalize(queryParams.code) ??  fragmentParams.get('code');
-
-        console.log("parseado:", parsed);
-        console.log("queryParams:", queryParams);
-        console.log("fragment:", fragment);
-        console.log("fragmentParams:", fragmentParams);
-        console.log ("token_hash: ", token_hash);
-        console.log ("type: ", type);
-        console.log ("conde: ", code);
 
         if (token_hash){
           const {error} = await supabase.auth.verifyOtp({
@@ -59,7 +48,6 @@ export default function AuthCallback() {
           data: { session: existingSession }
         } = await supabase.auth.getSession();
         
-        console.log("SESSION", existingSession)
 
         router.replace(existingSession ? '/' : '/login');
 

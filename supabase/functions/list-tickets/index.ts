@@ -84,7 +84,8 @@ serve(async (req) => {
     let ticketsQuery = supabaseAdmin
       .from("tickets")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (ticketId) {
       ticketsQuery = ticketsQuery.eq("id", ticketId);

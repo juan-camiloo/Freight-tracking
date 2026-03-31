@@ -261,7 +261,6 @@ export default function ChatAssistantScreen() {
           do_number: resolvedDo,
         }),
       });
-      console.log("Status:", response.status)
 
       if (!response.ok) {
         const errorMessage = await resolveErrorMessage(response, t('chat.assistantRequestError'));
@@ -274,9 +273,6 @@ export default function ChatAssistantScreen() {
         (typeof data?.answer === 'string' ? data.answer : t('chat.assistantFallback'));
 
       if (data.mode === "handoff"){
-        console.log("ticketMessage actual:", ticketMessage)
-        console.log("data.mode: ", data.mode)
-        console.log("userMessage.text:", userMessage.text)
 
         setShouldShowTicketOption(true)
       }
@@ -301,7 +297,6 @@ export default function ChatAssistantScreen() {
     }
   };
   const handleCreateTicket = async (category:string) =>{
-    console.log("ticketMessage al crear ticket:", ticketMessage)
     const {data: dataSession} = await supabase.auth.getSession()
     const accessToken=dataSession.session?.access_token
     if (!accessToken) return;

@@ -199,7 +199,6 @@ async function sendExpoPush(tokens: string[], title: string, body: string, link:
   const payload = await readJsonSafe(response);
   const tickets = Array.isArray(payload?.data) ? payload.data : [];
   // Log temporal para depurar errores de Expo Push (credentials, device, etc).
-  console.log("Expo Push tickets:", JSON.stringify(tickets));
 
   // Filtra los tokens invalidos devueltos por Expo para desactivarlos en DB
   // y evitar reintentos sobre dispositivos que ya no tienen la app instalada.
@@ -353,12 +352,6 @@ serve(async (req) => {
       return json(400, { error: "event_type invalido", error_key: "notifyShipmentEvent.invalidEventType" });
     }
 
-    console.log("notifyShipmentEvent start", {
-      event_type: body.event_type,
-      shipment_id: body.shipment_id,
-      has_target_user_id: Boolean(body.target_user_id),
-      target_user_ids_len: Array.isArray(body.target_user_ids) ? body.target_user_ids.length : 0,
-    });
 
     // Service role para consultas que requieren acceso sin restricciones de RLS.
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -437,25 +430,12 @@ serve(async (req) => {
     }
 
     if (targetUserIds.length === 0) {
-      console.log("notifyShipmentEvent noRecipients", {
-        event_type: body.event_type,
-        shipment_id: body.shipment_id,
-        has_shipment_client_id: Boolean(shipmentRow?.client_id),
-      });
       return json(200, {
         sent: 0,
         reason: "No hay destinatario para notificar",
         reason_key: "notifyShipmentEvent.noRecipients",
       });
     }
-
-    console.log("notifyShipmentEvent recipients", {
-      count: targetUserIds.length,
-      source: recipientSource,
-      has_shipment_client_id: Boolean(shipmentRow?.client_id),
-      owner_added: ownerAdded,
-    });
-
     // 5) Obtencion de endpoints push activos filtrando tokens inactivos o expirados.
     const { data: endpoints, error: endpointsError } = await supabase
       .from("notifications")
@@ -473,11 +453,6 @@ serve(async (req) => {
 
     const rows = (endpoints ?? []) as PushEndpoint[];
     if (rows.length === 0) {
-      console.log("notifyShipmentEvent noActiveTokens", {
-        event_type: body.event_type,
-        shipment_id: body.shipment_id,
-        recipients: targetUserIds.length,
-      });
       return json(200, {
         sent: 0,
         reason: "Usuario sin tokens activos",
@@ -499,12 +474,6 @@ serve(async (req) => {
     // Separar tokens por plataforma para usar el canal de envio correcto.
     const expoTokens = rows.filter((row) => row.platform === "expo").map((row) => row.token);
     const webTokens = rows.filter((row) => row.platform === "web_fcm").map((row) => row.token);
-    console.log("notifyShipmentEvent endpoints", {
-      total: rows.length,
-      expo: expoTokens.length,
-      web: webTokens.length,
-    });
-
     // Enviar a dispositivos nativos y limpiar tokens invalidos detectados.
     const invalidExpoTokens = await sendExpoPush(expoTokens, message.title, message.body, link);
     await deactivateInvalidTokens(supabase, "expo", invalidExpoTokens);

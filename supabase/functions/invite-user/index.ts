@@ -62,9 +62,17 @@ serve(async (req) => {
         401,
       );
     }
-
+    let body : any;
+    try {
+      body = await req.json()
+    } catch {
+        return jsonResponse (
+          {error: "JSON invalido"},
+          400
+      );
+    }
     // 3) Extraer datos de la invitacion enviados por el frontend.
-    const { email, is_internal, nickname } = await req.json();
+    const { email, is_internal, nickname } = body;
 
     if (!email) {
       return jsonResponse(

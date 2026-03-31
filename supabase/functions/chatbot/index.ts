@@ -306,9 +306,16 @@ serve(async (req) => {
       );
     }
 
-    
-
-    const { message, do_number } = await req.json()
+    let body : any;
+    try {
+      body = await req.json()
+    } catch {
+        return jsonResponse (
+          {error: "JSON invalido"},
+          400
+      );
+    }
+    const { message, do_number } = body;
 
     if (!message) {
       return jsonResponse({
@@ -339,9 +346,6 @@ serve(async (req) => {
     if (requestedFields.size > 0 && intent) {
       const intentFields = intent.database?.fields ?? []
       const coversAny = intentFields.some((field: string) => requestedFields.has(field))
-      console.error("requestedFields:", Array.from(requestedFields))
-console.error("intentFields:", intentFields)
-console.error("coversAny:", coversAny)
       if (!coversAny) {
         intent = null
       }
@@ -376,7 +380,6 @@ console.error("coversAny:", coversAny)
     //    en base a la pregunta, usando la whitelist de tablas y campos permitidos.
     if (!intent) {
       const aiResult = await aiDatabaseAnswer(message, DO)
-      console.log("AI RESULT:", aiResult)
       let parsed
       try {
         // Limpiar posibles bloques de codigo Markdown que la IA pueda incluir.
@@ -424,12 +427,6 @@ console.error("coversAny:", coversAny)
         (f: string) => ALLOWED_FIELDS[table]?.includes(f)
       ) || []
 
-      console.log("=== AI DATABASE ANSWER ===")
-      console.log("DO:", DO)
-      console.log("TABLE:", table)
-      console.log("FIELDS de la IA:", fields)
-      console.log("FIELDS después de whitelist:", safeFields)
-
       if (safeFields.length === 0) {
         return jsonResponse({
           mode: "handoff",
@@ -454,16 +451,22 @@ console.error("coversAny:", coversAny)
     }
 
     if (table === "shipment_updates") {
-        const result = await query.order("created_at", { ascending: false }).limit(1)
-        data=result.data
-        error=result.error
+      const { data: userShipments } = await supabase
+        .from("profile_shipment")
+        .select("shipment_id")
+        .eq("client_id", user.id);
+
+      const shipmentIds = (userShipments ?? []).map(s => s.shipment_id);
+      query = query.in("shipment_id", shipmentIds);
+
+      const result = await query.order("created_at", { ascending: false }).limit(1)
+      data=result.data
+      error=result.error
     } else {
         const result = await query.single()
         data=result.data
         error=result.error
         }
-      console.log("DATA:", JSON.stringify(data))
-      console.log("ERROR:", JSON.stringify(error))
 
       if (error || !data) {
         return jsonResponse({

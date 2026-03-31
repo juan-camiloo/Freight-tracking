@@ -71,12 +71,9 @@ export default function Login() {
     if (!error){
       const {data: {session}}= await supabase.auth.getSession();
       if (session){
-        console.log("sesion activa")
         router.replace('/');
       }
     }
-    console.log("verifyOtp error:", error)
-    console.log("verifyOtp success:", !error)
     if (error) {
       Alert.alert(t('common.error'), error.message);
     }

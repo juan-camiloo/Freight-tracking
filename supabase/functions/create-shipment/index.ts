@@ -116,7 +116,15 @@ serve(async (req) => {
     }
 
     // 4) Validar que los campos minimos obligatorios esten presentes en el payload.
-    const body: Shipment = await req.json();
+    let body : any;
+    try {
+      body = await req.json()
+    } catch {
+        return jsonResponse (
+          {error: "JSON invalido", error_key: "createTicket.invalidJson"},
+          400
+      );
+    }
     const { do_number, origin, destination, owner_email } = body;
 
     if (!do_number || !origin || !destination) {

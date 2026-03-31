@@ -28,7 +28,8 @@ serve(async (req) => {
 
   try {
     // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
-    const authHeader = req.headers.get("authorization");
+    const authHeader =
+      req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse(
         { error: "Falta el encabezado de autorizacion", error_key: "listProfiles.authHeaderMissing" },

@@ -68,8 +68,21 @@ serve(async (req) => {
         401,
       );
     }
-    const {message, do_number, category} = await req.json();
-    const supportEmail= CATEGORY_EMAILS [category] || CATEGORY_EMAILS ["other"]  
+    
+    let body : any;
+    try {
+      body = await req.json()
+    } catch {
+        return jsonResponse (
+          {error: "JSON invalido"},
+          400
+      );
+    }
+    const {message, do_number, category} = body;
+    const safeCategory = typeof category === "string" ? category.trim().toLowerCase() : "other";
+
+    const supportEmail= CATEGORY_EMAILS [safeCategory] || CATEGORY_EMAILS ["other"]  
+    const subjectCategory= (safeCategory||"other").toUpperCase();
     if (!message) {
       return jsonResponse(
         { error: "Mensaje requerido", error_key: "createTicket.messageRequired" },
@@ -95,6 +108,16 @@ serve(async (req) => {
         500,
       ); 
     }
+    const escapeHtml =( input: string) =>
+      input 
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const safeMessage = escapeHtml(message);
+    const safeDo = do_number ? escapeHtml(String(do_number)) : null;
     const newTicket = ticket[0];
     const ticketId = newTicket.id;
     const emailClient = user.email;
@@ -105,7 +128,7 @@ serve(async (req) => {
       );
     }
     const resend = new Resend(Deno.env.get("RESEND_API_KEY")!);
-    await Promise.all([
+    const results await Promise.allSelected([
       //Email al cliente
       resend.emails.send({
         from: "soporte@ingelox.com.co",
@@ -121,7 +144,7 @@ serve(async (req) => {
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #D7E3EE;border-radius:12px;overflow:hidden;">
                     <tr>
                       <td style="background:#F28A07;padding:20px 24px;text-align:center;">
-                        <h1 style="margin:0;font-size:22px;line-height:1.2;color:#1B2A3A;">Freight Tracking</h1>
+                        <h1 style="margin:0;font-size:22px;line-height:1.2;color:#1B2A3A;">Como va mi carga</h1>
                       </td>
                     </tr>
 
@@ -158,7 +181,7 @@ serve(async (req) => {
                     </tr>
                   </table>
                   <p style="margin-top:20px; font-size:12px; color:#6B7C8F; text-align: center;">
-                    © 2026 Freight Tracking | Soporte Técnico
+                    © 2026 Ingelox SAS | Soporte Técnico
                   </p>
                 </td>
               </tr>
@@ -171,7 +194,7 @@ serve(async (req) => {
       resend.emails.send({
       from: "system@ingelox.com.co",
       to: supportEmail,
-      subject: `🚨 [${category.toUpperCase()}]Nuevo Ticket: ${emailClient} - DO: ${do_number || 'N/A'}`,
+      subject: `🚨 [${subjectCategory}]Nuevo Ticket: ${emailClient} - DO: ${do_number || 'N/A'}`,
       html: `
       <!doctype html>
       <html lang="es">
@@ -182,7 +205,7 @@ serve(async (req) => {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #D7E3EE;border-radius:12px;overflow:hidden;">
                   <tr>
                     <td style="background:#1E5F99;padding:20px 24px;text-align:center;">
-                      <h1 style="margin:0;font-size:20px;line-height:1.2;color:#ffffff;">Freight Tracking</h1>
+                      <h1 style="margin:0;font-size:20px;line-height:1.2;color:#ffffff;">Como va mi carga</h1>
                     </td>
                   </tr>
 
@@ -213,12 +236,12 @@ serve(async (req) => {
                   <tr>
                     <td style="padding:16px 24px 24px 24px; border-top:1px solid #D7E3EE; background:#fcfcfc;">
                       <p style="margin:0; font-size:12px; line-height:1.6; color:#6B7C8F; text-align:center;">
-                        Este es un mensaje automático generado por el sistema de Freight Tracking.
+                        Este es un mensaje automático generado por el sistema de "Como va mi carga".
                       </p>
                     </td>
                   </tr>
                 </table>
-                <p style="margin-top:20px; font-size:12px; color:#6B7C8F;">© 2026 Freight Tracking | Ingelox</p>
+                <p style="margin-top:20px; font-size:12px; color:#6B7C8F;">© 2026 Ingelox SAS | Ingelox</p>
               </td>
             </tr>
           </table>
@@ -228,6 +251,9 @@ serve(async (req) => {
 
       })
     ]);
+    for (const r of results) {
+      if (r status === "rejected") console.error ("Email failed", r.reason);
+    }
     return new Response(JSON.stringify({ ticket }), {
       status: 201,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

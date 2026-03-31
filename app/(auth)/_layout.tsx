@@ -17,7 +17,6 @@ export default function AuthLayout() {
     // si la promesa de getSession resuelve despues de una navegacion.
     let mounted = true;
     supabase.auth.getSession().then(({ data: { session } }) => {
-        console.log('[AuthLayout] getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
 
       if (!mounted) return;
 
@@ -31,7 +30,6 @@ export default function AuthLayout() {
         // notificaciones. Se hace aqui para cubrir el caso de reabrir la app.
         void registerCurrentDevicePushToken(session.user.id);
       }
-      console.log('[AuthLayout] setCheckingSession(false)'); // agregar
 
       setCheckingSession(false);
     });
@@ -41,7 +39,6 @@ export default function AuthLayout() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-        console.log('[AuthLayout] onAuthStateChange event:', event, 'session:', session ? 'HAS SESSION' : 'NO SESSION');
 
       // Re-registrar token en login nuevo o cuando Supabase refresca el JWT
       // para evitar que el token quede asociado a un user_id incorrecto.
