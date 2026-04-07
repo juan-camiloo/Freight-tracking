@@ -240,7 +240,7 @@ export default function Dashboard() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.fabAssistant} 
-            onPress={() => router.push('/chat')}
+            onPress={() => router.push('/createTicket')}
             onLayout={(e) => console.log('FAB width:', e.nativeEvent.layout.width)}
           >
             <Text 
@@ -248,7 +248,7 @@ export default function Dashboard() {
               numberOfLines={1}
               adjustsFontSizeToFit
             >
-              {t('dashboard.fabAssistant')}
+              {t('dashboard.fabCreateTicket')}
             </Text>
           </TouchableOpacity>
         )}

@@ -38,6 +38,7 @@
     "viewProfiles": "View Profiles",
     "fabTickets": "Tickets",
     "fabAssistant": "Assistant",
+    "fabCreateTicket": "Create ticket",
     "supportInbox": "Support Inbox",
     "noShipmentsFound": "No shipments found",
     "noShipmentsAvailable": "No shipments available"
@@ -188,6 +189,23 @@
       "air": "Air Ops",
       "other": "Other"
     }
+  },
+  "ticketCreateScreen": {
+    "headerTitle": "Create ticket",
+    "title": "Support request",
+    "subtitle": "Tell us what you need and choose a category so our team can help you faster.",
+    "messageLabel": "Message *",
+    "messagePlaceholder": "Describe your request...",
+    "doLabel": "DO (optional)",
+    "doPlaceholder": "e.g. X12345",
+    "categoryLabel": "Category *",
+    "categoryHint": "Pick the category that best describes your request.",
+    "submit": "Create ticket",
+    "submitting": "Creating...",
+    "successTitle": "Ticket created",
+    "successBody": "We received your request. We'll get back to you soon.",
+    "missingMessage": "Please enter a message",
+    "missingCategory": "Please choose a category"
   },
   "chatbot": {
     "authHeaderMissing": "Missing authorization header",

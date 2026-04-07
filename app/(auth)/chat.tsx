@@ -424,7 +424,9 @@ export default function ChatAssistantScreen() {
                     <Text style={styles.ticketPrompt}>{t('chat.createTicketOption')}</Text>
                     <View style={styles.ticketActions}>
                       <TouchableOpacity
-                        onPress={() => setShouldShowCategoryOptions(true)}
+                        onPress={() => 
+                          {setShouldShowCategoryOptions(true)
+                          setShouldShowTicketOption(false)}}
                         style={[styles.ticketButton, styles.ticketButtonPrimary]}
                       >
                         <Text style={styles.ticketButtonPrimaryText}>{t('common.yes')}</Text>

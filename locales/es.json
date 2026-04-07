@@ -39,6 +39,7 @@
     "viewProfiles": "Ver Perfiles",
     "fabTickets": "Tickets",
     "fabAssistant": "Asistente",
+    "fabCreateTicket": "Crear ticket",
     "supportInbox": "Bandeja Soporte",
     "noShipmentsFound": "No se encontraron cargas",
     "noShipmentsAvailable": "No hay cargas disponibles"
@@ -199,6 +200,23 @@
       "air": "Operación aérea",
       "other": "Otro"
     }
+  },
+  "ticketCreateScreen": {
+    "headerTitle": "Crear ticket",
+    "title": "Solicitud de soporte",
+    "subtitle": "Cuentanos tu solicitud y selecciona una categoria para que el equipo te ayude mas rapido.",
+    "messageLabel": "Mensaje *",
+    "messagePlaceholder": "Describe tu solicitud...",
+    "doLabel": "DO (opcional)",
+    "doPlaceholder": "Ej: X12345",
+    "categoryLabel": "Categoria *",
+    "categoryHint": "Selecciona la categoria que mejor describe tu caso.",
+    "submit": "Crear ticket",
+    "submitting": "Creando...",
+    "successTitle": "Ticket creado",
+    "successBody": "Recibimos tu solicitud. Te responderemos pronto.",
+    "missingMessage": "Ingresa un mensaje",
+    "missingCategory": "Selecciona una categoria"
   },
   "chatbot": {
     "authHeaderMissing": "Falta el encabezado de autorizacion",
