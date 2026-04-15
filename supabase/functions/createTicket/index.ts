@@ -128,7 +128,7 @@ serve(async (req) => {
       );
     }
     const resend = new Resend(Deno.env.get("RESEND_API_KEY")!);
-    const results await Promise.allSelected([
+    const results = await Promise.allSettled([
       //Email al cliente
       resend.emails.send({
         from: "soporte@ingelox.com.co",
@@ -252,7 +252,7 @@ serve(async (req) => {
       })
     ]);
     for (const r of results) {
-      if (r status === "rejected") console.error ("Email failed", r.reason);
+      if (r.status === "rejected") console.error ("Email failed", r.reason);
     }
     return new Response(JSON.stringify({ ticket }), {
       status: 201,

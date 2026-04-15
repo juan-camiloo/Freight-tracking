@@ -7,12 +7,12 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../../components/LogoCorner';
+import { getShipmentTypeLabelKey } from '../../../lib/shipmentType';
 import { supabase } from '../../../lib/supabase';
 
 type Shipment = {
   id: string;
   do_number: string;
-  tracking_number?: string | null;
   shipment_type: string;
   origin: string;
   destination: string;
@@ -361,10 +361,10 @@ if (insertError) {
     ? t(`shipmentForm.options.inspectionStatus.${inspectionStatusValue}`, { defaultValue: shipment.inspection_status ?? '' })
     : '';
 
-  const shipmentTypeValue = shipment.shipment_type?.toLowerCase() ?? '';
-const shipmentTypeLabel = shipmentTypeValue
-  ? t(`shipmentForm.options.shipmentType.${shipmentTypeValue}`, { defaultValue: shipment.shipment_type })
-  : shipment.shipment_type;
+  const shipmentTypeLabelKey = getShipmentTypeLabelKey(shipment.shipment_type);
+  const shipmentTypeLabel = shipmentTypeLabelKey
+    ? t(shipmentTypeLabelKey, { defaultValue: shipment.shipment_type ?? '' })
+    : shipment.shipment_type ?? '';
   const cargoTypeValue = shipment.cargo_type?.toLowerCase() ?? '';
   const cargoTypeLabel = cargoTypeValue
     ? t(`shipmentForm.options.cargoType.${cargoTypeValue}`, { defaultValue: shipment.cargo_type ?? '' })
@@ -416,9 +416,6 @@ const shipmentTypeLabel = shipmentTypeValue
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionInfo')}</Text>
           <InfoRow label={t('shipmentDetail.labels.doNumber')} value={shipment.do_number} />
-          {shipment.tracking_number && (
-            <InfoRow label={t('shipmentDetail.labels.trackingNumber')} value={shipment.tracking_number} />
-          )}
           <InfoRow label={t('shipmentDetail.labels.via')} value={shipmentTypeLabel} />
           <InfoRow label={t('shipmentDetail.labels.origin')} value={shipment.origin} />
           <InfoRow label={t('shipmentDetail.labels.destination')} value={shipment.destination} />

@@ -101,6 +101,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('shipments')
         .select('*')
+        .eq ('status', 'active')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -125,6 +126,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('shipments')
         .select('*')
+        .eq('status', 'active')
         .or(`do_number.ilike.%${cleanQuery}%,origin.ilike.%${cleanQuery}%,destination.ilike.%${cleanQuery}%`)
         .order('created_at', { ascending: false })
         .limit(20);

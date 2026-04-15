@@ -237,7 +237,6 @@
   "shipmentForm": {
     "labels": {
       "doNumber": "DO Number *",
-      "trackingNumber": "Tracking Number",
       "via": "Mode",
       "origin": "Origin *",
       "destination": "Destination *",
@@ -262,7 +261,6 @@
     },
     "placeholders": {
       "doNumber": "DO12345",
-      "trackingNumber": "TRK12345",
       "via": "Select mode",
       "origin": "City, Country",
       "destination": "City, Country",
@@ -288,6 +286,7 @@
       "shipmentType": {
         "air": "Air",
         "sea": "Sea",
+        "maritime": "Sea",
         "land": "Land"
       },
       "cargoType": {
@@ -307,7 +306,9 @@
         "none": "None",
         "documentary": "Documentary",
         "physical": "Physical",
-        "released": "Released"
+        "released": "Released",
+        "automatic": "Automatic"
+
       }
     }
   },
@@ -410,7 +411,6 @@
     "sectionDocuments": "Documents",
     "labels": {
       "doNumber": "DO Number",
-      "trackingNumber": "Tracking Number",
       "via": "Mode",
       "origin": "Origin",
       "destination": "Destination",

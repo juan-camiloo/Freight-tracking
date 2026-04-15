@@ -11,6 +11,7 @@ import { useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../components/LogoCorner';
+import { SHIPMENT_TYPE_OPTIONS } from '../../lib/shipmentType';
 import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
 
 const COLORS = {
@@ -24,12 +25,6 @@ const COLORS = {
   placeholder: '#8B98A6',
   border: '#D7E3EE',
 };
-
-const SHIPMENT_TYPES = [
-  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'air' },
-  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'maritime' },
-  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'land' },
-];
 
 const INCOTERMS = [
   { label: 'EXW', value: 'EXW' },
@@ -65,6 +60,7 @@ const INSPECTION_STATUSES = [
   { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
   { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
   { labelKey: 'shipmentForm.options.inspectionStatus.released', value: 'released' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.automatic', value: 'automatic' },
 ];
 type DateField = 'etd' | 'eta' | 'documentaryCutoff';
 
@@ -100,7 +96,6 @@ export default function CreateShipment() {
   // Un estado por campo para mantener control granular sobre cada input
   // y facilitar el armado del payload sin transformaciones adicionales.
   const [doNumber, setDoNumber] = useState('');
-  const [trackingNumber, setTrackingNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
@@ -133,7 +128,7 @@ export default function CreateShipment() {
   const resolveOptions = (options: Array<{ labelKey: string; value: string }>) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
-  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPES);
+  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPE_OPTIONS);
   const cargoTypeOptions = resolveOptions(CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
@@ -246,7 +241,6 @@ export default function CreateShipment() {
           },
           body: JSON.stringify({
             do_number: doNumber,
-            tracking_number: trackingNumber || null,
             shipment_type: shipmentType || null,
             origin,
             destination,
@@ -321,7 +315,6 @@ export default function CreateShipment() {
         <View style={styles.form}>
           {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
           <Field label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} placeholder={t('shipmentForm.placeholders.doNumber')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.trackingNumber')} value={trackingNumber} onChangeText={setTrackingNumber} placeholder={t('shipmentForm.placeholders.trackingNumber')} onSubmitEditing={handleCreate} />
           <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
           <Field label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} placeholder={t('shipmentForm.placeholders.origin')} onSubmitEditing={handleCreate} />
           <Field label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} placeholder={t('shipmentForm.placeholders.destination')} onSubmitEditing={handleCreate} />

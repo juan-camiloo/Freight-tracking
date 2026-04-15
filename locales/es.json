@@ -248,7 +248,6 @@
   "shipmentForm": {
     "labels": {
       "doNumber": "DO Number *",
-      "trackingNumber": "Tracking Number",
       "via": "Via",
       "origin": "Origen *",
       "destination": "Destino *",
@@ -273,10 +272,9 @@
     },
     "placeholders": {
       "doNumber": "DO12345",
-      "trackingNumber": "TRK12345",
       "via": "Selecciona via",
-      "origin": "Ciudad, Pais",
-      "destination": "Ciudad, Pais",
+      "origin": "NSA",
+      "destination": "BUN",
       "date": "Selecciona fecha",
       "dateTime": "Selecciona fecha y hora",
       "incoterm": "Selecciona incoterm",
@@ -299,6 +297,7 @@
       "shipmentType": {
         "air": "Aereo",
         "sea": "Maritimo",
+        "maritime": "Maritimo",
         "land": "Terrestre"
       },
       "cargoType": {
@@ -318,7 +317,8 @@
         "none": "Ninguna",
         "documentary": "Documental",
         "physical": "Fisica",
-        "released": "Liberada"
+        "released": "Liberada",
+        "automatic": "Automatica"
       }
     }
   },
@@ -421,7 +421,6 @@
     "sectionDocuments": "Documentos",
     "labels": {
       "doNumber": "DO Number",
-      "trackingNumber": "Tracking Number",
       "via": "Via",
       "origin": "Origen",
       "destination": "Destino",

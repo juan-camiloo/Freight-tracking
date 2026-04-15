@@ -24,7 +24,6 @@ const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
 
 type Shipment = {
   do_number: string;
-  tracking_number?: string | null;
   shipment_type?: string | null;
   origin: string;
   destination: string;
@@ -195,7 +194,6 @@ serve(async (req) => {
       .from("shipments")
       .insert({
         do_number: body.do_number,
-        tracking_number: body.tracking_number ?? null,
         shipment_type: body.shipment_type ?? null,
         origin: body.origin,
         destination: body.destination,

@@ -8,6 +8,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LogoCorner from '../../../components/LogoCorner';
+import { normalizeShipmentType, SHIPMENT_TYPE_OPTIONS } from '../../../lib/shipmentType';
 import { notifyShipmentEvent } from '../../../lib/shipmentNotifications';
 import { supabase } from '../../../lib/supabase';
 
@@ -22,12 +23,6 @@ const COLORS = {
   placeholder: '#8B98A6',
   border: '#D7E3EE',
 };
-
-const SHIPMENT_TYPES = [
-  { labelKey: 'shipmentForm.options.shipmentType.air', value: 'air' },
-  { labelKey: 'shipmentForm.options.shipmentType.sea', value: 'maritime' },
-  { labelKey: 'shipmentForm.options.shipmentType.land', value: 'land' },
-];
 
 const INCOTERMS = [
   { label: 'EXW', value: 'EXW' },
@@ -63,6 +58,7 @@ const INSPECTION_STATUSES = [
   { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
   { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
   { labelKey: 'shipmentForm.options.inspectionStatus.released', value: 'released' },
+  { labelKey: 'shipmentForm.options.inspectionStatus.automatic', value: 'automatic' },
 ];
 
 type DateField = 'etd' | 'eta' | 'documentaryCutoff';
@@ -104,7 +100,6 @@ export default function EditShipment() {
 
   // Campos editables del formulario.
   const [doNumber, setDoNumber] = useState('');
-  const [trackingNumber, setTrackingNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
   const [currentLocation, setCurrentLocation] = useState('');
@@ -134,7 +129,7 @@ export default function EditShipment() {
   const resolveOptions = (options: Array<{ labelKey: string; value: string }>) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
-  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPES);
+  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPE_OPTIONS);
   const cargoTypeOptions = resolveOptions(CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
@@ -157,8 +152,7 @@ export default function EditShipment() {
       if (error) throw error;
 
       setDoNumber(data.do_number || '');
-      setTrackingNumber(data.tracking_number || '');
-      setShipmentType(data.shipment_type || '');
+      setShipmentType(normalizeShipmentType(data.shipment_type));
       setCurrentStatus(data.current_status || '');
       setCurrentLocation(data.current_location || '');
       setExporter(data.exporter || '');
@@ -205,7 +199,6 @@ export default function EditShipment() {
         .from('shipments')
         .update({
           do_number: doNumber,
-          tracking_number: trackingNumber || null,
           shipment_type: shipmentType || null,
           current_status: currentStatus,
           current_location: currentLocation,
@@ -407,7 +400,6 @@ export default function EditShipment() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.form}>
           <InputField label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.trackingNumber')} value={trackingNumber} onChangeText={setTrackingNumber} onSubmitEditing={handleSave} />
           <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
           <InputField label={t('shipmentForm.labels.status')} value={currentStatus} onChangeText={setCurrentStatus} onSubmitEditing={handleSave} />
           <InputField label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
