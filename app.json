@@ -32,6 +32,9 @@
     },
     "web": {
       "output": "single",
+      "meta": {
+        "google-site-verification": "XeN0bbfqcXGL9dSdzo1f_iSqlsSYrbMLBAvbpSX_8Gk"
+      },
       "title": "Como va mi carga - Ingelox",
       "description": "Rastrea tu carga fácilmente con Ingelox",
       "lang": "es",
