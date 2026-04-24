@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "Como va mi carga",
+    "description": "Hazle seguimiento a tu carga facilmente con Como va mi carga",
     "slug": "freight-tracking",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,6 +32,9 @@
     },
     "web": {
       "output": "single",
+      "title": "Como va mi carga - Ingelox",
+      "description": "Rastrea tu carga fácilmente con Ingelox",
+      "lang": "es",
       "favicon": "./visual/favicon.png"
     },
     "plugins": [
