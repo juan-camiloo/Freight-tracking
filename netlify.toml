@@ -2,3 +2,6 @@
   from = "/*"
   to = "/index.html"
   status = 200
+[build]
+  command = "npx expo export -p web && sed -i 's|</head>|<meta name=\"google-site-verification\" content=\"XeN0bbfqcXGL9dSdzo1f_iSqlsSYrbMLBAvbpSX_8Gk\" /></head>|' dist/index.html"
+  publish = "dist"
