@@ -4,8 +4,10 @@
 import { Slot, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { AUTH_COLORS, AuthScreenBackground } from '../../components/auth/AuthChrome';
+import { AuthMobileDock } from '../../components/auth/AuthNavigation';
 import { registerCurrentDevicePushToken } from '../../lib/pushNotifications';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/URLs';
 
 export default function AuthLayout() {
   // Controla si la validacion de sesion inicial termino.
@@ -71,19 +73,30 @@ export default function AuthLayout() {
   if (checkingSession) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <AuthScreenBackground />
+        <ActivityIndicator color={AUTH_COLORS.orange} />
       </View>
     );
   }
 
   // Slot renderiza la ruta activa dentro del grupo (auth).
-  return <Slot />;
+  return (
+    <View style={styles.frame}>
+      <Slot />
+      <AuthMobileDock />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    flex: 1,
+  },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
 });

@@ -1,421 +1,498 @@
-/* Archivo: app/(auth)/index.tsx
-Pantalla principal. Lista cargas, permite buscar cargas por DO, origen o destino
-y en caso de usuario interno, muestra acciones de administracion.
-*/
+// Archivo: app/(auth)/index.tsx
 
+import { RouteProgress } from '@/components/common/Progressbar';
+import { QuickActionsPanel } from '@/components/QuickActionsPanel';
+import { useSelectedShipments } from '@/hooks/useSelectedShipments';
 import i18n, { setAppLanguage } from '@/i18n';
+import * as types from '@/lib/shipmentType';
+import { formatDateDisplay, formatDateTimeDisplay } from '@/utils/dateFormatting';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../components/LogoCorner';
-import { supabase } from '../../lib/supabase';
-
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-};
-
-// Modelo minimo usado para renderizar cada tarjeta de carga.
-// Solo se seleccionan los campos necesarios para la lista, no el shipment completo.
-type ShipmentListItem = {
-  id: string;
-  do_number: string;
-  origin: string;
-  destination: string;
-  current_status: string;
-  incoterm?: string | null;
-};
-
-// Evita guardar como error los rechazos de promesas canceladas por navegacion o recarga.
-const isAbortError = (error: unknown) =>
-  error instanceof Error &&
-  (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
-
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
+import { ShipmentTransportBadge } from '../../components/auth/ShipmentTransportIcon';
+import Header from '../../components/Header';
+import { ShipmentFiltersPanel } from '../../components/ShipmentFiltesPanel';
+import { ShipmentSwitchCard } from '../../components/ShipmentSwitchCard';
+import { COLORS } from '../../components/ui/COLORS';
+import { useDashboardShipments } from '../../hooks/useDashboardShipments';
+import { useResponsive } from '../../hooks/useResponsive';
+import { useSelectedShipmentDocuments } from '../../hooks/useSelectedShipmentDocuments';
+import { useShipmentFilters } from '../../hooks/useShipmentFilters';
+import { useWebNotifications } from '../../hooks/useWebNotifications';
+import { supabase } from '../../lib/URLs';
 export default function Dashboard() {
   const { t } = useTranslation();
-  // Valor actual del campo de busqueda.
-  const [searchQuery, setSearchQuery] = useState('');
-  // Datos completos devueltos por la carga inicial de cargas.
-  const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
-  // Resultados filtrados al buscar; se usa en lugar de shipments cuando hay query activo.
-  const [searchResults, setSearchResults] = useState<ShipmentListItem[]>([]);
-  // Indicador visual de busqueda en progreso.
-  const [searching, setSearching] = useState(false);
-  // Indicador de carga inicial de la pantalla.
-  const [loading, setLoading] = useState(true);
-  // Habilita acciones de administracion si el usuario es interno.
-  const [isInternal, setIsInternal] = useState(false);
+  const { isDesktop, height, width } = useResponsive();
+  const desktopListMaxHeight = Math.max(320, Math.min(560, height - 240));
+  const {
+    searchQuery,
+    setSearchQuery,
+    baseVisibleShipments,
+    loading,
+    searching,
+    userId,
+    isInternal,
+    searchShipment,
+  } = useDashboardShipments();
+  const {
+    filters,
+    filtersOpen,
+    visibleShipments,
+    activeFilterCount,
+    updateFilter,
+    resetFilters,
+    toggleFiltersOpen,
+  } = useShipmentFilters(baseVisibleShipments);
+  const { 
+    selectedShipmentId, 
+    selectedShipment,
+    selectShipment
+  } = useSelectedShipments(visibleShipments);
+  const { 
+    documents, 
+    detailLoading 
+  } = useSelectedShipmentDocuments({
+    selectedShipmentId, 
+    isInternal, 
+    userId
+  });
 
-  // Carga inicial: valida sesion, determina rol e hidrata la lista de cargas.
-  useEffect(() => {
-    void loadUserAndShipments();
-  }, []);
-
-  // Debounce de 300ms para evitar una consulta por cada caracter que escribe el usuario.
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      void searchShipment(searchQuery.trim());
-    }, 300);
-
-    return () => clearTimeout(timeout);
-  }, [searchQuery]);
-
-  // Valida sesion, determina rol interno y obtiene las cargas visibles para el usuario.
-  // Las politicas RLS de Supabase filtran automaticamente segun el usuario autenticado.
-  const loadUserAndShipments = async () => {
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.replace('/login');
-        return;
-      }
-
-      // Consultar el perfil para saber si el usuario puede ver las acciones de admin.
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_internal')
-        .eq('id', user.id)
-        .single();
-
-      setIsInternal(profile?.is_internal || false);
-
-      // Cargar todas las cargas visibles para este usuario segun RLS,
-      // ordenadas por fecha de creacion descendente para mostrar las mas recientes primero.
-      const { data, error } = await supabase
-        .from('shipments')
-        .select('*')
-        .eq ('status', 'active')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setShipments(data || []);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      console.error('Error cargando cargas:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  const toggleLanguage = async ()=> {
+  const { webNotificationPermission, 
+    handleEnableWebNotifications 
+  } = useWebNotifications();
+  const toggleLanguage = async () => {
     const next = i18n.language === 'es' ? 'en' : 'es';
-    await setAppLanguage (next as 'es' | 'en')
-  }
-
-  // Busqueda flexible: acepta coincidencias parciales en DO, origen o destino.
-  // ilike garantiza busqueda case-insensitive sin transformar el query en cliente.
-  const searchShipment = async (cleanQuery: string) => {
-    try {
-      setSearching(true);
-      const { data, error } = await supabase
-        .from('shipments')
-        .select('*')
-        .eq('status', 'active')
-        .or(`do_number.ilike.%${cleanQuery}%,origin.ilike.%${cleanQuery}%,destination.ilike.%${cleanQuery}%`)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setSearchResults(data || []);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      console.error('Error buscando cargas:', error);
-    } finally {
-      setSearching(false);
-    }
+    await setAppLanguage(next as 'es' | 'en');
   };
-
-  // Cierra la sesion de Supabase y redirige al login.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace('/login');
   };
-
+  
+  const statusTone = getStatusTone(selectedShipment?.current_status);
+  const shipmentTypeLabel = getShipmentTypeLabel(selectedShipment, t);
+  const desktopMeta = buildShipmentMeta(selectedShipment, shipmentTypeLabel, t);
+  const canRequestWebNotifications =
+    Platform.OS === 'web' && Boolean(userId) && webNotificationPermission === 'default';
+    
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color={COLORS.orange} />
       </View>
     );
   }
+  console.log('DEBUG isDesktop:', isDesktop, 'width:', width);
 
   return (
-    <View style={styles.container}>
-      <View style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
+    <View style={[styles.container, { minHeight: height }]}>
+      <View style={styles.backgroundBase} />
+      <View style={styles.backgroundGlowOne} />
+      <View style={styles.backgroundGlowTwo} />
+      <Header
+        isDesktop={isDesktop}
+        searchQuery={searchQuery}
+        searching={searching}
+        isInternal={isInternal}
+        selectedShipment={selectedShipment}
+        selectedShipmentId={selectedShipment?.id}
+        canRequestWebNotifications={canRequestWebNotifications}
+        onSearchChange={setSearchQuery} 
+        onSubmitSearch={searchShipment}
+        onEnableNotifications={handleEnableWebNotifications}
+        onToggleLanguage={toggleLanguage}
+        onLogout={handleLogout}
+        showNews={true}
+      />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <ShipmentFiltersPanel
+          filters={filters}
+          filtersOpen={filtersOpen}
+          activeFilterCount={activeFilterCount}
+          totalCount={baseVisibleShipments.length}
+          visibleCount={visibleShipments.length}
+          isDesktop={isDesktop}
+          t={t}
+          onToggleOpen={toggleFiltersOpen}
+          onChangeFilter={updateFilter}
+          onResetFilters={resetFilters}
         />
-      </View>
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          {/* Titulo diferenciado segun tipo de usuario para mayor claridad contextual. */}
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {isInternal ? t('dashboard.headerInternal') : t('dashboard.headerExternal')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={toggleLanguage}>
-              <Text style={styles.topActionText}>es/en</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={{ minWidth: 60, alignItems: 'center' }}>
-              <Text style={styles.topActionText} numberOfLines={1} adjustsFontSizeToFit>
-                {t('common.logout')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.content}>
-        {/* Barra de busqueda con debounce activo via useEffect */}
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder={t('dashboard.searchPlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            onSubmitEditing={() => {
-              const clean = searchQuery.trim();
-              if (clean) {
-                void searchShipment(clean);
-              }
-            }}
-          />
-        </View>
-
-        {searching && (
-          <View style={styles.searchStatus}>
-            <ActivityIndicator size="small" color={COLORS.orange} />
-            <Text style={styles.searchStatusText}>{t('common.searching')}</Text>
-          </View>
-        )}
-
-        {/* Acciones administrativas visibles exclusivamente para usuarios internos */}
-        {isInternal && (
-          <View style={styles.internalActions}>
-            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/createShipment')}>
-              <Text style={styles.actionButtonText}>{t('dashboard.createShipment')}</Text>
-            </TouchableOpacity>
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionButtonAlt, styles.actionHalf]}
-                onPress={() => router.push('/addUser')}
-              >
-                <Text style={styles.actionButtonAltText}>{t('dashboard.addUser')}</Text>
+        {!visibleShipments.length ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="cube-outline" size={34} color={COLORS.secondaryText} />
+            <Text style={styles.emptyTitle}>
+              {activeFilterCount
+                ? t('dashboard.filters.emptyTitle', { defaultValue: 'No hay cargas con estos filtros' })
+                : searchQuery.trim()
+                  ? t('dashboard.noShipmentsFound')
+                  : t('dashboard.noShipmentsAvailable')}
+            </Text>
+            <Text style={styles.emptySubtitle}>{t('dashboard.emptyStateSubtitle')}</Text>
+            {activeFilterCount ? (
+              <TouchableOpacity style={styles.emptyResetButton} onPress={resetFilters}>
+                <Ionicons name="refresh-outline" size={16} color={COLORS.primaryText} />
+                <Text style={styles.emptyResetText}>
+                  {t('dashboard.filters.clear', { defaultValue: 'Limpiar filtros' })}
+                </Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButtonAlt1, styles.actionHalf]}
-                onPress={() => router.push('/profiles')}
-              >
-                <Text style={styles.actionButtonAltText}>{t('dashboard.viewProfiles')}</Text>
-              </TouchableOpacity>
-            </View>
+            ) : null}
           </View>
-        )}
-
-        {/* FAB flotante: IA para externos, Bandeja Soporte para internos */}
-        {isInternal ? (
-          <TouchableOpacity style={styles.fabAssistant} onPress={() => router.push('/supportInbox' as any)}>
-            <Text style={styles.fabAssistantText}>{t('dashboard.fabTickets')}</Text>
-          </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.fabAssistant} 
-            onPress={() => router.push('/createTicket')}
-            onLayout={(e) => console.log('FAB width:', e.nativeEvent.layout.width)}
-          >
-            <Text 
-              style={styles.fabAssistantText} 
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {t('dashboard.fabCreateTicket')}
-            </Text>
-          </TouchableOpacity>
-        )}
+          <>
+            {!isDesktop ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.shipmentRail, { flexGrow: 1 }]}
+              >
+                {visibleShipments.map((item) => {
+                  return (
+                    <ShipmentSwitchCard
+                      key={item.id}
+                      shipment={item}
+                      selected={item.id === selectedShipment?.id}
+                      desktop={isDesktop}
+                      onPress={() => selectShipment(item.id)}
+                    />
+                  );
+                })}
+              </ScrollView>
+            ) : null}
 
-        {/* Lista principal: muestra resultados de busqueda si hay query activo,
-            o la lista completa cargada al inicio si no hay filtro aplicado. */}
-        <FlatList
-          data={searchQuery.trim() ? searchResults : shipments}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => router.push(`/shipment/${item.id}`)}>
-              <Text style={styles.cardDO}>{item.do_number}</Text>
-              <Text style={styles.cardRoute}>
-                {item.origin} {'->'} {item.destination}
-              </Text>
-              <Text style={styles.cardStatus}>{item.current_status}</Text>
-              {item.incoterm && <Text style={styles.cardIncoterm}>{item.incoterm}</Text>}
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {searchQuery.trim().length > 0
-                ? t('dashboard.noShipmentsFound')
-                : t('dashboard.noShipmentsAvailable')}
-            </Text>
-          }
-        />
-      </View>
+            {selectedShipment ? (
+              isDesktop ? (
+                <View style={styles.desktopGrid}>
+                  <View style={styles.desktopListColumn}>
+                    <View style={styles.shadowCard}>
+                      <ScrollView
+                        style={[styles.desktopShipmentScroll, { maxHeight: desktopListMaxHeight }]}
+                        contentContainerStyle={styles.desktopShipmentList}
+                        showsVerticalScrollIndicator={false}
+                      >
+                        {visibleShipments.map((item) => {
+                          return (
+                            <ShipmentSwitchCard
+                              key={item.id}
+                              shipment={item}
+                              selected={item.id === selectedShipment?.id}
+                              desktop={isDesktop}
+                              onPress={() => selectShipment(item.id)}
+                            />
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  </View>
+
+                  <View style={styles.desktopMainColumn}>
+                    <View style={[styles.desktopHeroCard, styles.shadowCard]}>
+                      <View style={styles.desktopHeroTop}>
+                        <View style={styles.desktopHeroCopy}>
+                          <Text style={styles.desktopHeroTitle}>{selectedShipment.do_number}</Text>
+                          <Text style={styles.desktopHeroMeta}>{desktopMeta}</Text>
+                          <Text style={styles.desktopHeroMeta}>
+                            {selectedShipment.updated_by
+                              ?  `${t('common.updatedBy')} ${selectedShipment.updated_by}`
+                              :  `${t('common.createdBy')} ${selectedShipment.created_by?? '---'}`
+                            }
+                          </Text>
+                        </View>
+                        <View style={styles.heroTopActions}>
+                          <View style={[styles.statusPill, { backgroundColor: statusTone.pillBackground }]}>
+                            <Text style={[styles.statusPillText, { color: statusTone.pillText }]}>
+                              {selectedShipment.current_status || t('dashboard.pendingLabel')}
+                            </Text>
+                          </View>
+                          <ShipmentTransportBadge
+                            shipment={selectedShipment}
+                            shipmentType={selectedShipment.shipment_type}
+                            color={COLORS.primaryText}
+                            size={20}
+                            containerStyle={styles.heroTransportBadge}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.desktopRouteCard}>
+                        <View style={styles.desktopRouteLabels}>
+                          <View>
+                            <Text style={styles.routeCode}>{selectedShipment.origin}</Text>
+                          </View>
+                          <View style={styles.routeEndBlock}>
+                            <Text style={styles.routeCode}>{selectedShipment.destination}</Text>
+                          </View>
+                        </View>
+                        <RouteProgress
+                          toneColor={statusTone.progress}
+                          shipment={selectedShipment}
+                        />
+                      </View>
+                    </View>
+                    <QuickActionsPanel 
+                      isInternal={isInternal} 
+                      selectedShipment={selectedShipment} 
+                    />
+                  </View>
+
+                  <View style={styles.desktopSideColumn}>
+                    <View style={[styles.infoCard, styles.shadowCard]}>
+                      <Text style={styles.infoSectionTitle}>{t('shipmentDetail.header')}</Text>
+                      <InfoLine label={t('shipmentDetail.labels.carrier')} value={selectedShipment.carrier || t('dashboard.notAvailable')} />
+                      <InfoLine label={t('shipmentDetail.labels.flight')} value={selectedShipment.flight_vessel || t('dashboard.notAvailable')} />
+                      <InfoLine label={t('shipmentDetail.labels.eta')} value={formatDateTimeDisplay(selectedShipment.eta, i18n.language === 'es' ? 'es-CO' : 'en-US')} />
+                      <InfoLine label={t('shipmentDetail.labels.ata')} value={selectedShipment.ata ? formatDateTimeDisplay(selectedShipment.ata, i18n.language === 'es' ? 'es-CO' : 'en-US') : t('dashboard.notAvailable')} />
+                      <InfoLine label={t('shipmentDetail.labels.incoterm')} value={selectedShipment.incoterm || t('dashboard.notAvailable')} />
+                    </View>
+
+                    <View style={[styles.infoCard, styles.shadowCard]}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.infoSectionTitle}>{t('shipmentDetail.sectionDocuments')}</Text>
+                        {detailLoading ? <ActivityIndicator size="small" color={COLORS.orange} /> : null}
+                      </View>
+                      {documents.length ? (
+                        <View style={styles.documentList}>
+                          {documents.slice(0, 4).map((document) => (
+                            <View key={document.id} style={styles.documentRow}>
+                              <View style={styles.documentIconWrap}>
+                                <Ionicons name="document-text-outline" size={18} color={COLORS.blue} />
+                              </View>
+                              <View style={styles.documentCopy}>
+                                <Text style={styles.documentName} numberOfLines={1}>{document.file_name}</Text>
+                                <Text style={styles.documentMeta}>{formatDocumentSize(document.file_size)}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.emptyCardText}>{t('dashboard.emptyDocuments')}</Text>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.mobileStack}>
+                  <View style={[styles.mobileHeroCard, styles.shadowCard]}>
+                    <View style={styles.mobileHeroTop}>
+                      <View style={styles.mobileHeroCopy}>
+                        <Text style={styles.mobileHeroTitle}>{selectedShipment.do_number}</Text>
+                        <Text style={styles.mobileHeroMeta}>
+                          {shipmentTypeLabel || t('dashboard.pendingLabel')}
+                          {selectedShipment.incoterm ? ` · ${selectedShipment.incoterm}` : ''}
+                        </Text> 
+                        <Text style = {styles.mobileHeroMeta}>
+                          {selectedShipment.updated_by
+                            ?  `${t('common.updatedBy')} ${selectedShipment.updated_by}`
+                            :  `${t('common.createdBy')} ${selectedShipment.created_by?? '---'}`
+                          }
+                        </Text>
+                      </View>
+
+                      <View style={[styles.heroTopActions, styles.heroTopActionsMobile]}>
+                        <View style={[styles.statusPill, { backgroundColor: statusTone.pillBackground }]}>
+                          <Text style={[styles.statusPillText, { color: statusTone.pillText }]}>
+                            {selectedShipment.current_status || t('dashboard.pendingLabel')}
+                          </Text>
+                        </View>
+                        <ShipmentTransportBadge
+                          shipment={selectedShipment}
+                          shipmentType={selectedShipment.shipment_type}
+                          color={COLORS.primaryText}
+                          size={20}
+                          containerStyle={styles.heroTransportBadge}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.mobileRouteCard}>
+                      <View style={styles.mobileRouteLabels}>
+                        <View style={styles.mobileRouteBlock}>
+                          <Text style={styles.routeCode}>{selectedShipment.origin}</Text>
+                          <Text style={styles.routeDate}>{formatDateDisplay(selectedShipment.atd ?? selectedShipment.etd, i18n.language === 'es' ? 'es-CO' : 'en-US')}</Text>
+                        </View>
+                        <View style={[styles.mobileRouteBlock, styles.mobileRouteBlockEnd]}>
+                          <Text style={styles.routeCode}>{selectedShipment.destination}</Text>
+                          <Text style={styles.routeDate}>{formatDateDisplay(selectedShipment.ata ?? selectedShipment.eta, i18n.language === 'es' ? 'es-CO' : 'en-US')}</Text>
+                        </View>
+                      </View>
+                      <RouteProgress
+                        toneColor={statusTone.progress}
+                        shipment={selectedShipment}
+                      />
+                    </View>
+                  </View>
+
+                  {documents.length ? (
+                    <View style={[styles.sectionCard, styles.shadowCard]}>
+                      <Text style={styles.sectionTitle}>{t('shipmentDetail.sectionDocuments')}</Text>
+                      <View style={styles.documentList}>
+                        {documents.slice(0, 3).map((document) => (
+                          <View key={document.id} style={styles.documentRow}>
+                            <View style={styles.documentIconWrap}>
+                              <Ionicons name="document-text-outline" size={18} color={COLORS.blue} />
+                            </View>
+                            <View style={styles.documentCopy}>
+                              <Text style={styles.documentName} numberOfLines={1}>{document.file_name}</Text>
+                              <Text style={styles.documentMeta}>{formatDocumentSize(document.file_size)}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              )
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+
     </View>
   );
 }
 
+type InfoLineProps = { label: string; value: string };
+
+function InfoLine({ label, value }: InfoLineProps) {
+  return (
+    <View style={styles.infoLine}>
+      <Text style={styles.infoLineLabel}>{label}</Text>
+      <Text style={styles.infoLineValue}>{value}</Text>
+    </View>
+  );
+}
+
+
+
+
+
+function getShipmentTypeLabel(
+  shipment: types.ShipmentListItem | null | undefined,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  const inferredType = types.inferShipmentType(shipment ?? {});
+  const labelKey = types.getShipmentTypeLabelKey(inferredType || shipment?.shipment_type || '');
+  return labelKey ? t(labelKey, { defaultValue: shipment?.shipment_type ?? '' }) : (shipment?.shipment_type ?? '');
+}
+const string_ = "Hola"
+console.log (typeof string_)
+function buildShipmentMeta(
+  shipment: types.ShipmentListItem | null,
+  shipmentTypeLabel: string,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  if (!shipment) return '';
+  const parts = [formatDateTimeDisplay(shipment.created_at, i18n.language === 'es' ? 'es-CO' : 'en-US')];
+  if (shipmentTypeLabel) parts.push(shipmentTypeLabel);
+  if (shipment.incoterm) parts.push(shipment.incoterm);
+  if (!shipmentTypeLabel && !shipment.incoterm) parts.push(t('dashboard.pendingLabel'));
+  return parts.filter(Boolean).join(' · ');
+}
+
+
+function getStatusTone(status: string | null | undefined) {
+  const s = (status ?? '').toLowerCase();
+  if (s.includes('entreg') || s.includes('recibid') || s.includes('origin')) {
+    return { pillBackground: COLORS.greenSoft, pillText: COLORS.green, progress: COLORS.green };
+  }
+  if (s.includes('pending') || s.includes('waiting') || s.includes('program')) {
+    return { pillBackground: COLORS.blueSoft, pillText: COLORS.blue, progress: COLORS.blue };
+  }
+  return { pillBackground: COLORS.orangeSoft, pillText: COLORS.orange, progress: COLORS.orange };
+}
+
+function formatDocumentSize(fileSize: number) {
+  if (!fileSize) return '0 KB';
+  return `${(fileSize / 1024).toFixed(1)} KB`;
+}
+
+// ---------------------------------------------------------------------------
+// Estilos
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent', paddingTop: 30 },
-  content: { flex: 1, zIndex: 1, paddingTop: 72 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-    overflow: 'visible'
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
-  },
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 90,
-  },
-  topActionText: { 
-    color: '#1B2A3A', 
-    fontSize: 16, 
-    fontWeight: '600', 
-    padding: 6,
-    includeFontPadding: false,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    paddingTop: 16,
-    padding: 15,
-    backgroundColor: COLORS.cream,
-    gap: 30,
-  },
-  searchInput: {
-    flex: 1,
-    borderWidth: 1,
-    padding: 10,
-    borderRadius: 10,
-    color: COLORS.blueDark,
-    backgroundColor: COLORS.cream,
-  },
-  searchStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 15,
-    paddingBottom: 10,
-    backgroundColor: COLORS.cream,
-  },
-  searchStatusText: { color: COLORS.textSecondary, fontSize: 16 },
-  internalActions: {
-    padding: 15,
-    backgroundColor: COLORS.creamGlass,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    gap: 10,
-  },
-  fabAssistant: {
-    position: 'absolute',
-    right: 35,
-    bottom: 15,
-    minWidth: 100,
-    height: 45, 
-    borderRadius: 10,
-    backgroundColor: COLORS.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    paddingHorizontal: 12,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    overflow: 'visible'
-  },
-  fabAssistantText: {
-    color: COLORS.cream,
-    fontWeight: '700',
-  },
-  actionRow: { flexDirection: 'row', gap: 10 },
-  actionHalf: { flex: 1 },
-  actionButton: {
-    backgroundColor: COLORS.orange,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionButtonText: { color: COLORS.cream, fontWeight: '700' },
-  actionButtonAlt: {
-    backgroundColor: COLORS.blue,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionButtonAltText: { color: COLORS.cream, fontWeight: '700' },
-  actionButtonAlt1: {
-    backgroundColor: COLORS.orange,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  card: {
-    backgroundColor: COLORS.creamGlass,
-    margin: 10,
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardDO: { fontSize: 18, fontWeight: 'bold', marginBottom: 5, color: COLORS.blueDark },
-  cardRoute: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 5 },
-  cardStatus: { fontSize: 14, color: COLORS.orange, fontWeight: '600' },
-  cardIncoterm: { fontSize: 12, color: COLORS.textSecondary, marginTop: 5 },
-  emptyText: { textAlign: 'center', marginTop: 50, color: COLORS.textSecondary },
-});
+  container: { flex: 1, backgroundColor: COLORS.backgroundBottom, overflow: 'hidden' },
+  backgroundBase: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.backgroundBottom },
+  backgroundGlowOne: { position: 'absolute', top: -120, left: -50, width: 260, height: 260, borderRadius: 999, backgroundColor: 'rgba(199, 138, 75, 0.18)' },
+  backgroundGlowTwo: { position: 'absolute', top: 40, right: -70, width: 280, height: 280, borderRadius: 999, backgroundColor: 'rgba(79, 104, 142, 0.18)' },
+  loadingScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.backgroundBottom },
+  headerActionsMobile: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' },
+  scroll: { flex: 1 },
+  content: { gap: 18 },
+  contentDesktop: { paddingHorizontal: 28, paddingTop: 24, paddingBottom: 28 },
+  contentMobile: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 28 },
+  contentWithDock: { paddingBottom: AUTH_MOBILE_DOCK_PADDING },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
+  statusRowText: { color: COLORS.surface, fontSize: 14 },
+  emptyState: { marginTop: 30, paddingVertical: 34, paddingHorizontal: 20, borderRadius: 24, backgroundColor: COLORS.surfaceSoft, alignItems: 'center', gap: 10 },
+  emptyTitle: { color: COLORS.primaryText, fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  emptySubtitle: { color: COLORS.secondaryText, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  emptyResetButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 14, backgroundColor: COLORS.orangeSoft, borderWidth: 1, borderColor: COLORS.orangeBorder, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  emptyResetText: { color: COLORS.primaryText, fontSize: 13, fontWeight: '800' },
+  shipmentRail: { gap: 12, paddingRight: 10 },
+  desktopGrid: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
+  desktopListColumn: { width: 236, flexShrink: 0 },
+  desktopShipmentScroll: { flexGrow: 0 },
+  desktopShipmentList: { gap: 10 },
+  desktopMainColumn: { flex: 1.5, gap: 18 },
+  desktopSideColumn: { flex: 1, gap: 18 },
+  mobileStack: { gap: 16 },
+  desktopHeroCard: { backgroundColor: COLORS.surface, borderRadius: 28, padding: 22, gap: 18 },
+  desktopHeroTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  desktopHeroCopy: { flex: 1 },
+  desktopHeroTitle: { color: COLORS.primaryText, fontSize: 34, fontWeight: '800' },
+  desktopHeroMeta: { color: COLORS.secondaryText, fontSize: 14, marginTop: 4 },
+  desktopRouteCard: { padding: 18, borderRadius: 22, backgroundColor: COLORS.backgroundTop, gap: 18 },
+  desktopRouteLabels: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  routeEndBlock: { alignItems: 'flex-end' },
+  mobileHeroCard: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 16, gap: 14 },
+  mobileHeroTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
+  mobileHeroCopy: { flex: 1, minWidth: 0 },
+  mobileHeroTitle: { color: COLORS.primaryText, fontSize: 28, fontWeight: '800' },
+  mobileHeroMeta: { color: COLORS.secondaryText, fontSize: 13, marginTop: 4, flexDirection: 'row', flexWrap: 'wrap' },
+  heroTopActions: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 8, flexShrink: 0, flexWrap: 'wrap' },
+  heroTopActionsMobile: { flexShrink: 1, justifyContent: 'flex-start' },
+  heroTransportBadge: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.orangeSoft, borderWidth: 1, borderColor: COLORS.orangeBorder },
+  mobileRouteCard: { padding: 14, borderRadius: 20, backgroundColor: COLORS.backgroundTop, gap: 14 },
+  mobileRouteLabels: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  mobileRouteBlock: { flex: 1 },
+  mobileRouteBlockEnd: { alignItems: 'flex-end' },
+  statusPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, alignSelf: 'flex-start' },
+  statusPillText: { fontSize: 12, fontWeight: '800' },
+  routeCode: { color: COLORS.surface, fontSize: 15, fontWeight: '800' },
+  routeDate: { color: 'rgba(245, 241, 234, 0.68)', fontSize: 12, marginTop: 4 },
+  sectionCard: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 18, gap: 14 },
+  shadowCard: { shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 22, elevation: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sectionTitle: { color: COLORS.primaryText, fontSize: 18, fontWeight: '800' },
+  infoCard: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 18, gap: 14 },
+  infoSectionTitle: { color: COLORS.primaryText, fontSize: 16, fontWeight: '800' },
+  infoLine: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+  infoLineLabel: { flex: 1, color: COLORS.secondaryText, fontSize: 12, fontWeight: '700' },
+  infoLineValue: { flex: 1, color: COLORS.primaryText, fontSize: 13, fontWeight: '600', textAlign: 'right' },
+  documentList: { gap: 12 },
+  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.line },
+  documentIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.blueSoft },
+  documentCopy: { flex: 1 },
+  documentName: { color: COLORS.primaryText, fontSize: 13, fontWeight: '700' },
+  documentMeta: { color: COLORS.secondaryText, fontSize: 12, marginTop: 2 },
+  emptyCardText: { color: COLORS.secondaryText, fontSize: 14, lineHeight: 20 },
+}); 

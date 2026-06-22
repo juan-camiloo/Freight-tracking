@@ -50,7 +50,6 @@ void i18n
     }
   })
   .catch((error) => {
-    console.error('Error initializing i18n:', error);
   });
 
 export const setAppLanguage = async (language: SupportedLanguage) => {

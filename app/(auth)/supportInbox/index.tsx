@@ -1,25 +1,31 @@
 // Archivo: app/(auth)/supportInbox/index.tsx
 // Descripcion: Bandeja de tickets para usuarios internos. Permite buscar por DO o correo.
 
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../../components/LogoCorner';
-import { listTicketsFunctionUrl, supabase, supabaseAnonKey } from '../../../lib/supabase';
-
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-  statusResolved: '#2E7D32',
-};
+import {
+    ActivityIndicator,
+    FlatList,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import {
+    AUTH_COLORS,
+    AUTH_SHADOW,
+    AuthHeader,
+    AuthHeaderAction,
+    AuthScreenBackground,
+} from '../../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../../components/auth/AuthNavigation';
+import { AuthSearchBar } from '../../../components/auth/AuthSearchBar';
+import { useNativeNotification } from '../../../components/ui/NativeNotification';
+import { useResponsive } from '../../../hooks/useResponsive';
+import { listTicketsFunctionUrl, supabase, supabaseAnonKey } from '../../../lib/URLs';
+import { formatDateDisplay } from '../../../utils/dateFormatting';
 
 type Ticket = {
   id: string;
@@ -33,20 +39,15 @@ type Ticket = {
   user_nickname?: string | null;
 };
 
-// Evita loguear como error cancelaciones de promesas por navegacion o recarga.
 const isAbortError = (error: unknown) =>
   error instanceof Error &&
   (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
 
-const formatDate = (raw?: string | null) => {
-  if (!raw) return '';
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-  return parsed.toLocaleDateString();
-};
-
 export default function SupportInbox() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const notification = useNativeNotification();
+  const { height, isDesktop } = useResponsive();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [searchResults, setSearchResults] = useState<Ticket[]>([]);
@@ -62,10 +63,10 @@ export default function SupportInbox() {
     [t],
   );
 
-  const statusColors: Record<string, string> = {
-    opened: COLORS.orange,
-    in_revision: COLORS.blue,
-    resolved: COLORS.statusResolved,
+  const statusStyles: Record<string, { backgroundColor: string; textColor: string }> = {
+    opened: { backgroundColor: AUTH_COLORS.orangeSoft, textColor: AUTH_COLORS.orange },
+    in_revision: { backgroundColor: AUTH_COLORS.blueSoft, textColor: AUTH_COLORS.blue },
+    resolved: { backgroundColor: AUTH_COLORS.greenSoft, textColor: AUTH_COLORS.green },
   };
 
   const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
@@ -96,7 +97,6 @@ export default function SupportInbox() {
     void loadTickets();
   }, []);
 
-  // Debounce para filtro local.
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -127,7 +127,7 @@ export default function SupportInbox() {
 
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
-        Alert.alert(t('common.error'), t('supportInbox.noSession'));
+        notification.error(t('supportInbox.noSession'));
         return;
       }
 
@@ -150,8 +150,7 @@ export default function SupportInbox() {
       setTickets(data || []);
     } catch (error) {
       if (isAbortError(error)) return;
-      console.error('Error cargando tickets:', error);
-      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('supportInbox.loadError'));
+      notification.error(error instanceof Error ? error.message : t('supportInbox.loadError'));
     } finally {
       setLoading(false);
     }
@@ -182,8 +181,9 @@ export default function SupportInbox() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.orange} />
+      <View style={[styles.center, styles.container]}>
+        <AuthScreenBackground />
+        <ActivityIndicator size="large" color={AUTH_COLORS.orange} />
       </View>
     );
   }
@@ -191,184 +191,201 @@ export default function SupportInbox() {
   const listData = searchQuery.trim().length > 0 ? searchResults : tickets;
 
   return (
-    <View style={styles.container}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+    <View style={[styles.container, { minHeight: height }]}>
+      <AuthScreenBackground />
+      <AuthHeader
+        title={t('supportInbox.headerTitle')}
+        isDesktop={isDesktop}
+        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+      />
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('supportInbox.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
+      <FlatList
+        data={listData}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        contentContainerStyle={[
+          styles.listContent,
+          isDesktop ? styles.listContentDesktop : styles.listContentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.headerStack}>
+            <View style={[styles.searchCard, styles.shadowCard]}>
+              <AuthSearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={t('supportInbox.searchPlaceholder')}
+                onSubmitEditing={filterTickets}
+                searching={searching}
+              />
+            </View>
           </View>
-        </View>
-      </View>
+        }
+        renderItem={({ item }) => {
+          const statusKey = item.ticket_status ?? 'opened';
+          const statusLabel = statusLabels[statusKey as keyof typeof statusLabels] || statusKey;
+          const statusTone = statusStyles[statusKey] ?? statusStyles.in_revision;
+          const doLabel = item.do_number?.trim() ? item.do_number : t('supportInbox.noDo');
+          const emailLabel = item.user_email?.trim() ? item.user_email : t('supportInbox.noEmail');
+          const createdLabel = formatDateDisplay(item.created_at, i18n.language === 'es' ? 'es-CO' : 'en-US');
+          const messageText = item.message ?? '';
+          const preview =
+            messageText.length > 120 ? `${messageText.slice(0, 120).trim()}...` : messageText;
 
-      <View style={styles.content}>
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder={t('supportInbox.searchPlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            onSubmitEditing={filterTickets}
-          />
-        </View>
-
-        {searching && (
-          <View style={styles.searchStatus}>
-            <ActivityIndicator size="small" color={COLORS.orange} />
-            <Text style={styles.searchStatusText}>{t('common.searching')}</Text>
-          </View>
-        )}
-
-        <FlatList
-          data={listData}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const statusKey = item.ticket_status ?? 'opened';
-            const statusLabel = statusLabels[statusKey as keyof typeof statusLabels] || statusKey;
-            const statusColor = statusColors[statusKey] ?? COLORS.blueMid;
-            const doLabel = item.do_number?.trim() ? item.do_number : t('supportInbox.noDo');
-            const emailLabel = item.user_email?.trim() ? item.user_email : t('supportInbox.noEmail');
-            const createdLabel = formatDate(item.created_at);
-            const messageText = item.message ?? '';
-            const preview =
-              messageText.length > 120 ? `${messageText.slice(0, 120).trim()}...` : messageText;
-
-            return (
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() =>
-                  router.push({
-                    pathname: '/supportInbox/[id]',
-                    params: { id: item.id },
-                  })
-                }
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardDO}>{doLabel}</Text>
-                  <View style={[styles.statusPill, { backgroundColor: statusColor }]}>
-                    <Text style={styles.statusText}>{statusLabel}</Text>
-                  </View>
+          return (
+            <TouchableOpacity
+              style={[styles.card, styles.shadowCard]}
+              onPress={() =>
+                router.push({
+                  pathname: '/supportInbox/[id]',
+                  params: { id: item.id },
+                })
+              }
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.ticketBadge}>
+                  <Ionicons name="mail-open-outline" size={18} color={AUTH_COLORS.blue} />
                 </View>
-                <Text style={styles.cardEmail}>{emailLabel}</Text>
-                {createdLabel ? (
-                  <Text style={styles.cardDate}>{t('supportInbox.createdAt', { date: createdLabel })}</Text>
-                ) : null}
-                <Text style={styles.cardMessage}>{preview}</Text>
-              </TouchableOpacity>
-            );
-          }}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
+                <View style={styles.cardCopy}>
+                  <Text style={styles.cardDO}>{doLabel}</Text>
+                  <Text style={styles.cardEmail}>{emailLabel}</Text>
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: statusTone.backgroundColor }]}>
+                  <Text style={[styles.statusText, { color: statusTone.textColor }]}>{statusLabel}</Text>
+                </View>
+              </View>
+
+              {createdLabel ? (
+                <Text style={styles.cardDate}>{t('supportInbox.createdAt', { date: createdLabel })}</Text>
+              ) : null}
+
+              <Text style={styles.cardMessage}>{preview}</Text>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={[styles.emptyState, styles.shadowCard]}>
+            <Ionicons name="mail-outline" size={34} color={AUTH_COLORS.secondaryText} />
+            <Text style={styles.emptyTitle}>
               {searchQuery.trim().length > 0 ? t('supportInbox.notFound') : t('supportInbox.empty')}
             </Text>
-          }
-        />
-      </View>
+          </View>
+        }
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent', paddingTop: 30 },
-  content: { flex: 1, zIndex: 1, paddingTop: 72 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
+  container: {
+    flex: 1,
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  headerRow: {
-    flexDirection: 'row',
+  center: {
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    gap: 14,
+    paddingBottom: 28,
+  },
+  listContentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+  },
+  listContentMobile: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingTop: 18,
+  },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+  headerStack: {
+    gap: 14,
+    marginBottom: 2,
+  },
+  searchCard: {
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    padding: 14,
     gap: 10,
   },
-  headerTitle: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
-  },
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 60,
-  },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
-  searchContainer: {
-    flexDirection: 'row',
-    paddingTop: 16,
-    padding: 15,
-    backgroundColor: COLORS.cream,
-  },
-  searchInput: {
-    flex: 1,
-    borderWidth: 1,
-    padding: 10,
-    borderRadius: 10,
-    color: COLORS.blueDark,
-    backgroundColor: COLORS.cream,
-  },
-  searchStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 15,
-    paddingBottom: 10,
-    backgroundColor: COLORS.cream,
-  },
-  searchStatusText: { color: COLORS.textSecondary, fontSize: 13 },
+  shadowCard: AUTH_SHADOW,
   card: {
-    backgroundColor: COLORS.creamGlass,
-    margin: 10,
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 6,
+    borderColor: AUTH_COLORS.line,
+    padding: 16,
+    gap: 10,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
   },
-  cardDO: { fontSize: 18, fontWeight: 'bold', color: COLORS.blueDark },
+  ticketBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: AUTH_COLORS.blueSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardDO: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AUTH_COLORS.primaryText,
+  },
+  cardEmail: {
+    marginTop: 4,
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+  },
   statusPill: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 999,
   },
-  statusText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  cardEmail: { color: COLORS.blueDark, fontSize: 14, fontWeight: '600' },
-  cardDate: { color: COLORS.textSecondary, fontSize: 12 },
-  cardMessage: { color: COLORS.textSecondary, fontSize: 13 },
-  emptyText: { textAlign: 'center', marginTop: 50, color: COLORS.textSecondary },
+  statusText: {
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  cardDate: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 12,
+  },
+  cardMessage: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  emptyState: {
+    marginTop: 10,
+    paddingVertical: 34,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    backgroundColor: AUTH_COLORS.surface,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  emptyTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
 });

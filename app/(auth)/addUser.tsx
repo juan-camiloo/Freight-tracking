@@ -1,38 +1,41 @@
 // Archivo: app/(auth)/addUser.tsx
 // Descripcion: Pantalla para invitar nuevos usuarios. Solo internos deben usar esta vista.
-
+import Header from '@/components/Header';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Image, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../components/LogoCorner';
-import { inviteUserFunctionUrl, supabase } from '../../lib/supabase';
-
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-};
+import {
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import {
+  AUTH_COLORS,
+  AUTH_SHADOW,
+  AuthScreenBackground
+} from '../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
+import { useNativeNotification } from '../../components/ui/NativeNotification';
+import { useResponsive } from '../../hooks/useResponsive';
+import { inviteUserFunctionUrl, supabase } from '../../lib/URLs';
 
 export default function AddUser() {
   const { t } = useTranslation();
-  // Datos del formulario de invitacion.
+  const notification = useNativeNotification();
+  const { height, isDesktop } = useResponsive();
+
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  // Estado visual del envio.
   const [loading, setLoading] = useState(false);
 
-  // Envia invitacion usando Edge Function.
   const handleAddUser = async () => {
     if (!email) {
-      Alert.alert(t('common.error'), t('addUser.missingEmail'));
+      notification.error(t('addUser.missingEmail'));
       return;
     }
 
@@ -43,13 +46,12 @@ export default function AddUser() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        Alert.alert(t('common.error'), t('addUser.noSession'));
+        notification.error(t('addUser.noSession'));
         setLoading(false);
         return;
       }
 
-      const response = await fetch(
-          inviteUserFunctionUrl, {
+      const response = await fetch(inviteUserFunctionUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -75,20 +77,19 @@ export default function AddUser() {
         throw new Error(errorMessage);
       }
 
-      Alert.alert(t('common.success'), t('addUser.createdSuccess'));
+      notification.success(t('addUser.createdSuccess'));
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert(t('common.error'), error.message);
+        notification.error(error.message);
       } else {
-        Alert.alert(t('common.error'), t('addUser.unknownError'));
+        notification.error(t('addUser.unknownError'));
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Navegacion segura hacia atras o al dashboard.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -98,36 +99,33 @@ export default function AddUser() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[StyleSheet.absoluteFill]}>
-        <Image
-          source={require('../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+    <View style={[styles.container, { minHeight: height }]}>
+      <AuthScreenBackground />
+      <Header
+        title={t('dashboard.addUser')}
+        isDesktop={isDesktop}
+        showSearch = {false}
+      />
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('addUser.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.card, styles.shadowCard, isDesktop && styles.cardDesktop]}>
+          <Text style={styles.title}>{t('addUser.headerTitle')}</Text>
+          <Text style={styles.subtitle}>{t('addUser.description')}</Text>
 
-      <View style={styles.content}>
-        <View style={styles.form}>
           <Text style={styles.label}>{t('addUser.emailLabel')}</Text>
           <TextInput
             style={styles.input}
             placeholder={t('login.emailPlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
+            placeholderTextColor={AUTH_COLORS.secondaryText}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -140,7 +138,7 @@ export default function AddUser() {
           <TextInput
             style={styles.input}
             placeholder={t('addUser.nicknamePlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
+            placeholderTextColor={AUTH_COLORS.secondaryText}
             value={nickname}
             onChangeText={setNickname}
             autoCapitalize="none"
@@ -148,100 +146,138 @@ export default function AddUser() {
             onSubmitEditing={handleAddUser}
           />
 
-          <View style={styles.switchContainer}>
-            <Text style={styles.label}>{t('addUser.isInternal')}</Text>
+          <View style={styles.switchCard}>
+            <View style={styles.switchCopy}>
+              <Text style={styles.switchTitle}>{t('addUser.isInternal')}</Text>
+              <Text style={styles.switchHint}>{t('addUser.internalHint')}</Text>
+            </View>
             <Switch
               value={isInternal}
               onValueChange={setIsInternal}
-              trackColor={{ false: COLORS.border, true: '#FFB24C' }}
-              thumbColor={isInternal ? COLORS.orange : COLORS.cream}
+              trackColor={{ false: AUTH_COLORS.surfaceMuted, true: AUTH_COLORS.orangeSoft }}
+              thumbColor={isInternal ? AUTH_COLORS.orange : AUTH_COLORS.surface}
             />
           </View>
 
           <TouchableOpacity style={styles.button} onPress={handleAddUser} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? t('addUser.creating') : t('addUser.createUser')}</Text>
+            <Text style={styles.buttonText}>
+              {loading ? t('addUser.creating') : t('addUser.createUser')}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { position: 'absolute', width: '100%', height: '100%' },
-  container: { flex: 1 },
-  content: { flex: 1, paddingTop: 72 },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  container: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  topActions: {
-    flexDirection: 'row',
+  scroll: { flex: 1 },
+  content: {
+    gap: 18,
+    paddingBottom: 28,
+  },
+  contentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
     alignItems: 'center',
-    gap: 8,
-    minWidth: 60,
   },
-  topActionText: {
-    color: '#1B2A3A',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-    includeFontPadding: false,
+  contentMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
   },
-  form: {
-    margin: 16,
-    padding: 20,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+  card: {
+    width: '100%',
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginTop: 50,
+    borderColor: AUTH_COLORS.line,
+    padding: 18,
   },
-  label: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: COLORS.blueDark },
+  cardDesktop: {
+    maxWidth: 760,
+    padding: 24,
+  },
+  shadowCard: AUTH_SHADOW,
+  title: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  subtitle: {
+    marginTop: 6,
+    marginBottom: 8,
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 14,
+    marginBottom: 6,
+    marginTop: 10,
+    color: AUTH_COLORS.secondaryText,
+  },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
+    borderColor: AUTH_COLORS.line,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     fontSize: 16,
-    marginBottom: 20,
-    backgroundColor: COLORS.cream,
-    color: COLORS.blueDark,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    color: AUTH_COLORS.primaryText,
+    minHeight: 48,
   },
-  switchContainer: {
+  switchCard: {
+    marginTop: 18,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  switchCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  switchTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  switchHint: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    lineHeight: 18,
   },
   button: {
-    backgroundColor: COLORS.orange,
-    padding: 15,
-    borderRadius: 8,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    marginTop: 20,
   },
-  buttonText: { color: COLORS.blueDark, fontSize: 16, fontWeight: '700' },
+  buttonText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

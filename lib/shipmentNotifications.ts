@@ -1,6 +1,6 @@
 // Modulo: shipmentNotifications
 // Encapsula la llamada a la Edge Function que dispara push por eventos de carga.
-import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from './URLs';
 
 // Tipos de eventos de carga que disparan notificacion.
 export type ShipmentEventType = 'assigned' | 'updated' | 'deleted';

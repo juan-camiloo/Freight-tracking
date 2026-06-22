@@ -1,12 +1,30 @@
 // Archivo: app/(auth)/profile/[id].tsx
 // Descripcion: Pantalla de detalle de perfil. Muestra datos basicos y permite navegar a asignacion de carga.
 
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../../components/LogoCorner';
-import { supabase } from '../../../lib/supabase';
+import {
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import {
+    AUTH_COLORS,
+    AUTH_SHADOW,
+    AuthHeader,
+    AuthHeaderAction,
+    AuthScreenBackground,
+} from '../../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../../components/auth/AuthNavigation';
+import { ShipmentTransportBadge } from '../../../components/auth/ShipmentTransportIcon';
+import { useNativeNotification } from '../../../components/ui/NativeNotification';
+import { useResponsive } from '../../../hooks/useResponsive';
+import { supabase } from '../../../lib/URLs';
 
 type Profile = {
   id: string;
@@ -15,32 +33,36 @@ type Profile = {
   nickname: string;
 };
 
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
+type AssignedShipment = {
+  id: string;
+  do_number: string;
+  origin: string;
+  destination: string;
+  shipment_type?: string | null;
+  current_status?: string | null;
+  current_location?: string | null;
+  air_waybill?: string | null;
+  container_number?: string | null;
+  eta?: string | null;
+  created_at?: string | null;
 };
 
 export default function ProfileDetail() {
   const { t } = useTranslation();
+  const notification = useNativeNotification();
   const { id } = useLocalSearchParams();
+  const { height, isDesktop } = useResponsive();
   const profileId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
-  // Datos basicos del perfil seleccionado.
+
   const [profile, setProfile] = useState<Profile | null>(null);
-  // Estado de carga inicial.
+  const [assignedShipments, setAssignedShipments] = useState<AssignedShipment[]>([]);
+  const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void loadProfileDetails();
   }, [id]);
 
-  // Consulta el perfil desde Supabase con el ID de la ruta.
   const loadProfileDetails = async () => {
     try {
       const {
@@ -56,20 +78,59 @@ export default function ProfileDetail() {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', id)
+        .eq('id', profileId)
         .single();
 
       if (profileError) throw profileError;
       setProfile(profileData);
-    } catch (error) {
-      console.error('Error cargando perfil:', error);
-      alert(t('profileDetail.loadError'));
+
+      if (!profileData.is_internal && profileId) {
+        await loadAssignedShipments(profileId);
+      } else {
+        setAssignedShipments([]);
+      }
+    } catch {
+      notification.error(t('profileDetail.loadError'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Navegacion segura al listado de perfiles.
+  const loadAssignedShipments = async (clientId: string) => {
+    try {
+      setShipmentsLoading(true);
+
+      const { data: relationData, error: relationError } = await supabase
+        .from('profile_shipment')
+        .select('shipment_id')
+        .eq('client_id', clientId);
+
+      if (relationError) throw relationError;
+
+      const shipmentIds = (relationData ?? [])
+        .map((row: { shipment_id: string }) => row.shipment_id)
+        .filter(Boolean);
+
+      if (!shipmentIds.length) {
+        setAssignedShipments([]);
+        return;
+      }
+
+      const { data: shipmentsData, error: shipmentsError } = await supabase
+        .from('shipments')
+        .select('id, do_number, origin, destination, shipment_type, current_status, current_location, air_waybill, container_number, eta, created_at')
+        .in('id', shipmentIds)
+        .order('created_at', { ascending: false });
+
+      if (shipmentsError) throw shipmentsError;
+      setAssignedShipments((shipmentsData as AssignedShipment[]) ?? []);
+    } catch {
+      setAssignedShipments([]);
+    } finally {
+      setShipmentsLoading(false);
+    }
+  };
+
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -80,57 +141,132 @@ export default function ProfileDetail() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
+      <View style={[styles.center, styles.container]}>
+        <AuthScreenBackground />
+        <ActivityIndicator size="large" color={AUTH_COLORS.orange} />
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View style={styles.center}>
-        <Text>{t('profileDetail.notFound')}</Text>
+      <View style={[styles.center, styles.container]}>
+        <AuthScreenBackground />
+        <Text style={styles.emptyText}>{t('profileDetail.notFound')}</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+    <View style={[styles.container, { minHeight: height }]}>
+      <AuthScreenBackground />
+      <AuthHeader
+        title={t('profileDetail.headerTitle')}
+        isDesktop={isDesktop}
+        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+      />
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('profileDetail.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/assignShipment/[id]', params: { id: profileId } })}
-              disabled={!profileId}
-            >
-              <Text style={[styles.topActionText, !profileId && styles.disabledText]}>
-                {t('profileDetail.assignShipment')}
-              </Text>
-            </TouchableOpacity>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.heroCard, styles.shadowCard]}>
+          <View style={styles.heroBadge}>
+            <Ionicons
+              name={profile.is_internal ? 'shield-checkmark-outline' : 'person-outline'}
+              size={26}
+              color={profile.is_internal ? AUTH_COLORS.green : AUTH_COLORS.blue}
+            />
+          </View>
+          <Text style={styles.heroTitle}>{profile.nickname || t('profiles.unnamedProfile')}</Text>
+          <Text style={styles.heroSubtitle}>{profile.email}</Text>
+
+          <View style={[styles.rolePill, profile.is_internal ? styles.rolePillInternal : styles.rolePillExternal]}>
+            <Text style={[styles.rolePillText, profile.is_internal ? styles.rolePillTextInternal : styles.rolePillTextExternal]}>
+              {profile.is_internal ? t('profiles.internalRole') : t('profiles.externalRole')}
+            </Text>
           </View>
         </View>
-      </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('profileDetail.sectionInfo')}</Text>
-          <InfoRow label={t('profileDetail.email')} value={profile.email || ''} />
-          <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
+        <View style={styles.grid}>
+          <View style={[styles.section, styles.shadowCard]}>
+            <Text style={styles.sectionTitle}>{t('profileDetail.sectionInfo')}</Text>
+            <InfoRow label={t('profileDetail.email')} value={profile.email || ''} />
+            <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
+          </View>
+
+          {!profile.is_internal ? (
+            <>
+              <View style={[styles.section, styles.shadowCard]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{t('profileDetail.sectionShipments')}</Text>
+                  {shipmentsLoading ? <ActivityIndicator size="small" color={AUTH_COLORS.orange} /> : null}
+                </View>
+
+                {assignedShipments.length ? (
+                  <ScrollView
+                    style={styles.assignedShipmentScroll}
+                    contentContainerStyle={styles.assignedShipmentList}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    {assignedShipments.map((shipment) => (
+                      <TouchableOpacity
+                        key={shipment.id}
+                        style={styles.shipmentCard}
+                        onPress={() => router.push(`/shipment/${shipment.id}`)}
+                      >
+                        <ShipmentTransportBadge
+                          shipment={shipment}
+                          shipmentType={shipment.shipment_type}
+                          color={AUTH_COLORS.primaryText}
+                          size={18}
+                          containerStyle={styles.shipmentIcon}
+                        />
+                        <View style={styles.shipmentCopy}>
+                          <Text style={styles.shipmentTitle} numberOfLines={1}>{shipment.do_number}</Text>
+                          <Text style={styles.shipmentRoute} numberOfLines={2}>
+                            {shipment.origin} {'->'} {shipment.destination}
+                          </Text>
+                          {shipment.current_status || shipment.current_location ? (
+                            <Text style={styles.shipmentMeta} numberOfLines={1}>
+                              {[shipment.current_status, shipment.current_location].filter(Boolean).join(' · ')}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Ionicons name="chevron-forward-outline" size={18} color={AUTH_COLORS.secondaryText} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.sectionCopy}>
+                    {shipmentsLoading ? t('profileDetail.shipmentsLoading') : t('profileDetail.shipmentsEmpty')}
+                  </Text>
+                )}
+              </View>
+
+              <View style={[styles.section, styles.shadowCard]}>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/assignShipment',
+                      params: { clientId: profileId },
+                    } as any)
+                  }
+                  disabled={!profileId}
+                >
+                  <Ionicons name="link-outline" size={18} color={AUTH_COLORS.primaryText} />
+                  <Text style={styles.primaryButtonText}>{t('dashboard.assignShipment')}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -146,66 +282,204 @@ function InfoRow({ label, value }: InfoRowProps) {
   if (!value) return null;
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}:</Text>
+      <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent' },
-  scroll: { flex: 1 },
-  content: { zIndex: 1, paddingBottom: 20, paddingTop: 100 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  container: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: AUTH_COLORS.surface,
+    fontSize: 15,
+  },
+  scroll: { flex: 1 },
+  content: {
+    gap: 18,
+    paddingBottom: 28,
+  },
+  contentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+  },
+  contentMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+  shadowCard: AUTH_SHADOW,
+  heroCard: {
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    padding: 22,
+    alignItems: 'center',
+  },
+  heroBadge: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  heroTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
   },
-  topActions: {
+  heroSubtitle: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  rolePill: {
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  rolePillInternal: {
+    backgroundColor: AUTH_COLORS.greenSoft,
+  },
+  rolePillExternal: {
+    backgroundColor: AUTH_COLORS.blueSoft,
+  },
+  rolePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rolePillTextInternal: {
+    color: AUTH_COLORS.green,
+  },
+  rolePillTextExternal: {
+    color: AUTH_COLORS.blue,
+  },
+  grid: {
+    gap: 18,
+  },
+  section: {
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    padding: 18,
+    gap: 14,
+  },
+  sectionTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sectionCopy: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  assignedShipmentScroll: {
+    flexGrow: 0,
+    maxHeight: 340,
+  },
+  assignedShipmentList: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  shipmentCard: {
+    minHeight: 78,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
+    gap: 10,
   },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
-  disabledText: { opacity: 0.5 },
-  section: {
-    backgroundColor: '#fff',
-    margin: 10,
-    padding: 15,
-    borderRadius: 8,
+  shipmentIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: AUTH_COLORS.blueSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  shipmentCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  shipmentTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  shipmentRoute: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  shipmentMeta: {
+    color: AUTH_COLORS.blue,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   infoRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: AUTH_COLORS.line,
   },
-  infoLabel: { width: 140, fontWeight: '600', color: '#666' },
-  infoValue: { flex: 1, color: '#333' },
+  infoLabel: {
+    flex: 1,
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  infoValue: {
+    flex: 1,
+    color: AUTH_COLORS.primaryText,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+  },
+  primaryButtonText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

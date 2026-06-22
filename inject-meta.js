@@ -6,4 +6,3 @@ const metaTag = '<meta name="google-site-verification" content="XeN0bbfqcXGL9dSd
 
 html = html.replace('</head>', `${metaTag}\n</head>`);
 fs.writeFileSync(path, html, 'utf8');
-console.log('✅ Meta tag inyectado');

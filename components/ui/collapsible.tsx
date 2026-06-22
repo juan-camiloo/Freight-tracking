@@ -1,8 +1,8 @@
 // Archivo: components/ui/collapsible.tsx
 // Descripcion: Componente desplegable que muestra/oculta contenido secundario.
 
-import { PropsWithChildren, useState } from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { PropsWithChildren, ReactNode, useState } from 'react';
+import { StyleProp, StyleSheet, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -10,28 +10,51 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
+type CollapsibleProps = PropsWithChildren<{
+  title: string;
+  initiallyOpen?: boolean;
+  iconColor?: string;
+  rightElement?: ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
+  headingStyle?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
+  titleStyle?: StyleProp<TextStyle>;
+}>;
+
+export function Collapsible({
+  children,
+  title,
+  initiallyOpen = false,
+  iconColor,
+  rightElement,
+  containerStyle,
+  headingStyle,
+  contentStyle,
+  titleStyle,
+}: CollapsibleProps) {
   // Controla si el bloque esta abierto o cerrado.
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(initiallyOpen);
   const theme = useColorScheme() ?? 'light';
+  const resolvedIconColor = iconColor ?? (theme === 'light' ? Colors.light.icon : Colors.dark.icon);
 
   return (
-    <ThemedView>
+    <ThemedView style={containerStyle}>
       <TouchableOpacity
-        style={styles.heading}
+        style={[styles.heading, headingStyle]}
         onPress={() => setIsOpen((value) => !value)}
         activeOpacity={0.8}>
         <IconSymbol
           name="chevron.right"
           size={18}
           weight="medium"
-          color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
+          color={resolvedIconColor}
           style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
         />
 
-        <ThemedText type="defaultSemiBold">{title}</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.title, titleStyle]}>{title}</ThemedText>
+        {rightElement}
       </TouchableOpacity>
-      {isOpen && <ThemedView style={styles.content}>{children}</ThemedView>}
+      {isOpen && <ThemedView style={[styles.content, contentStyle]}>{children}</ThemedView>}
     </ThemedView>
   );
 }
@@ -42,6 +65,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  title: {
+    flex: 1,
   },
   // Clase personalizada: contenido mostrado cuando el bloque esta abierto.
   content: {

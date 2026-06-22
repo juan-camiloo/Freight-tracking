@@ -25,5 +25,9 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "chat.tools.terminal.autoApprove": {
+    "npx tsc": true
+  },
+  "deno.enable": true
 }

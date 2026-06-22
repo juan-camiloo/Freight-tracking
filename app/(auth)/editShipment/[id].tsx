@@ -1,104 +1,51 @@
 // Archivo: app/(auth)/editShipment/[id].tsx
 // Descripcion: Pantalla para editar una carga existente y registrar una observacion en el historial si aplica.
 
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../../../components/LogoCorner';
-import { normalizeShipmentType, SHIPMENT_TYPE_OPTIONS } from '../../../lib/shipmentType';
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  AUTH_COLORS,
+  AUTH_SHADOW,
+  AuthScreenBackground
+} from '../../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING, toggleLanguage } from '../../../components/auth/AuthNavigation';
+import Header from '../../../components/Header';
+import { useNativeNotification } from '../../../components/ui/NativeNotification';
+import { useDashboardShipments } from '../../../hooks/useDashboardShipments';
+import { useResponsive } from '../../../hooks/useResponsive';
 import { notifyShipmentEvent } from '../../../lib/shipmentNotifications';
-import { supabase } from '../../../lib/supabase';
+import { BOOKING_STATUSES, CARGO_TYPES, getShipmentOperationLabelKey, getShipmentStatusOptions, INCOTERMS, INSPECTION_STATUSES, normalizeShipmentType, SHIPMENT_TYPE_OPTIONS } from '../../../lib/shipmentType';
+import { supabase } from '../../../lib/URLs';
+import { formatDateInputValue, formatDateTimeInputValue, mergeDateAndTime, parseDateInputValue } from '../../../utils/dateFormatting';
 
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-};
+type DateFieldName = 'etd' | 'eta' | 'atd' | 'ata' | 'documentaryCutoff';
 
-const INCOTERMS = [
-  { label: 'EXW', value: 'EXW' },
-  { label: 'FCA', value: 'FCA' },
-  { label: 'FAS', value: 'FAS' },
-  { label: 'FOB', value: 'FOB' },
-  { label: 'CFR', value: 'CFR' },
-  { label: 'CIF', value: 'CIF' },
-  { label: 'CPT', value: 'CPT' },
-  { label: 'CIP', value: 'CIP' },
-  { label: 'DAP', value: 'DAP' },
-  { label: 'DPU', value: 'DPU' },
-  { label: 'DDP', value: 'DDP' },
-];
+const DATE_TIME_FIELDS: DateFieldName[] = ['atd', 'ata', 'documentaryCutoff'];
 
-const CARGO_TYPES = [
-  { labelKey: 'shipmentForm.options.cargoType.general', value: 'general' },
-  { labelKey: 'shipmentForm.options.cargoType.dangerous', value: 'dangerous' },
-  { labelKey: 'shipmentForm.options.cargoType.perishable', value: 'perishable' },
-  { labelKey: 'shipmentForm.options.cargoType.refrigerated', value: 'refrigerated' },
-  { labelKey: 'shipmentForm.options.cargoType.chemicals', value: 'chemicals' },
-];
-
-const BOOKING_STATUSES = [
-  { labelKey: 'shipmentForm.options.bookingStatus.pending', value: 'pending' },
-  { labelKey: 'shipmentForm.options.bookingStatus.confirmed', value: 'confirmed' },
-  { labelKey: 'shipmentForm.options.bookingStatus.rejected', value: 'rejected' },
-  { labelKey: 'shipmentForm.options.bookingStatus.waiting_carrier', value: 'waiting_carrier' },
-];
-
-const INSPECTION_STATUSES = [
-  { labelKey: 'shipmentForm.options.inspectionStatus.none', value: 'none' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.released', value: 'released' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.automatic', value: 'automatic' },
-];
-
-type DateField = 'etd' | 'eta' | 'documentaryCutoff';
-
-const formatDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const formatDateTime = (date: Date) => {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${formatDate(date)} ${hours}:${minutes}`;
-};
-
-const parseDateValue = (value: string) => {
-  if (!value) return null;
-  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const mergeDateAndTime = (datePart: Date, timePart: Date) => {
-  const merged = new Date(datePart);
-  merged.setHours(timePart.getHours(), timePart.getMinutes(), 0, 0);
-  return merged;
-};
+const isDateTimeField = (field?: DateFieldName | null) => Boolean(field && DATE_TIME_FIELDS.includes(field));
 
 export default function EditShipment() {
-  // ID de la carga a editar, tomado de la ruta dinamica.
-  const { id } = useLocalSearchParams();
   const { t } = useTranslation();
+  const notification = useNativeNotification();
+  const { id } = useLocalSearchParams();
+  const { height, isDesktop } = useResponsive();
 
-  // Estados visuales de carga y guardado.
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Campos editables del formulario.
   const [doNumber, setDoNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
@@ -109,6 +56,8 @@ export default function EditShipment() {
   const [destination, setDestination] = useState('');
   const [etd, setEtd] = useState('');
   const [eta, setEta] = useState('');
+  const [atd, setAtd] = useState('');
+  const [ata, setAta] = useState('');
   const [documentaryCutoff, setDocumentaryCutoff] = useState('');
   const [incoterm, setIncoterm] = useState('');
   const [cargoType, setCargoType] = useState('');
@@ -122,25 +71,29 @@ export default function EditShipment() {
   const [observation, setObservation] = useState('');
   const [clientId, setClientId] = useState('');
 
-  const [activeDateField, setActiveDateField] = useState<DateField | null>(null);
-  const [androidTimeField, setAndroidTimeField] = useState<DateField | null>(null);
+  const [activeDateField, setActiveDateField] = useState<DateFieldName | null>(null);
+  const [androidTimeField, setAndroidTimeField] = useState<DateFieldName | null>(null);
   const [dateDraft, setDateDraft] = useState(new Date());
 
-  const resolveOptions = (options: Array<{ labelKey: string; value: string }>) =>
+  const { userId } = useDashboardShipments();
+  const resolveOptions = (options: { labelKey: string; value: string }[]) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
   const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPE_OPTIONS);
   const cargoTypeOptions = resolveOptions(CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
-
-  // Carga los datos al abrir la pantalla o cuando cambia el id.
+  const statusOptions = resolveOptions(getShipmentStatusOptions(doNumber));
+  const statusOptionsWithCurrentValue = currentStatus && !statusOptions.some((option) => option.value === currentStatus)
+    ? [...statusOptions, { label: currentStatus, value: currentStatus }]
+    : statusOptions;
+  const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber);
+  const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
+  const manageLanguage = toggleLanguage;
   useEffect(() => {
     void loadShipment();
   }, [id]);
 
-  // Consulta la carga actual para poblar los campos del formulario.
-  // Consulta datos actuales de la carga en DB.
   const loadShipment = async () => {
     try {
       const { data, error } = await supabase
@@ -161,6 +114,8 @@ export default function EditShipment() {
       setDestination(data.destination || '');
       setEtd(data.etd || '');
       setEta(data.eta || '');
+      setAtd(data.atd || '');
+      setAta(data.ata || '');
       setDocumentaryCutoff(data.documentary_cutoff || '');
       setIncoterm(data.incoterm || '');
       setCargoType(data.cargo_type || '');
@@ -173,22 +128,20 @@ export default function EditShipment() {
       setCarrier(data.carrier || '');
       setClientId(data.client_id || '');
     } catch {
-      Alert.alert(t('common.error'), t('editShipment.loadError'));
+      notification.error(t('editShipment.loadError'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Guarda los cambios en shipments y opcionalmente agrega un registro en shipment_updates.
-  // Valida y guarda cambios. Registra observacion si aplica.
   const handleSave = async () => {
     if (!doNumber || !origin || !destination) {
-      Alert.alert(t('common.error'), t('editShipment.doRequiredError'));
+      notification.error(t('editShipment.doRequiredError'));
       return;
     }
 
     if (freeDays && Number.isNaN(Number(freeDays))) {
-      Alert.alert(t('common.error'), t('editShipment.freeDaysError'));
+      notification.error(t('editShipment.freeDaysError'));
       return;
     }
 
@@ -208,6 +161,8 @@ export default function EditShipment() {
           destination,
           etd: etd || null,
           eta: eta || null,
+          atd: atd || null,
+          ata: ata || null,
           documentary_cutoff: documentaryCutoff || null,
           incoterm: incoterm || null,
           cargo_type: cargoType || null,
@@ -218,6 +173,7 @@ export default function EditShipment() {
           flight_vessel: flightVessel || null,
           container_number: containerNumber || null,
           carrier: carrier || null,
+          updated_by: userId,
         })
         .eq('id', id);
 
@@ -229,6 +185,7 @@ export default function EditShipment() {
           status: currentStatus,
           location: currentLocation,
           observation,
+          updated_by: userId
         });
 
         if (updateLogError) throw updateLogError;
@@ -241,38 +198,37 @@ export default function EditShipment() {
         status: currentStatus,
       });
 
-      Alert.alert(t('common.success'), t('editShipment.updatedOk'));
+      notification.success(t('editShipment.updatedOk'));
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert(t('common.error'), error.message);
+        notification.error(error.message);
       } else {
-        Alert.alert(t('common.error'), t('editShipment.unknownError'));
+        notification.error(t('editShipment.unknownError'));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  // Modal de confirmacion para eliminar carga.
-  const handleDelete = () => {
-    Alert.alert(t('editShipment.deleteTitle'), t('editShipment.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: () => {
-          void confirmDelete();
-        },
-      },
-    ]);
+  const handleDelete = async () => {
+    const confirmed = await notification.confirm({
+      title: t('common.delete'),
+      message: t('editShipment.deleteConfirm'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+
+    if (confirmed) {
+      void confirmDelete();
+    }
   };
 
-  // Elimina en DB y notifica al usuario asignado.
   const confirmDelete = async () => {
     const shipmentId = String(id ?? '');
     if (!shipmentId) {
-      Alert.alert(t('common.error'), t('editShipment.invalidShipmentId'));
+      notification.error(t('editShipment.invalidShipmentId'));
       return;
     }
 
@@ -288,20 +244,19 @@ export default function EditShipment() {
         doNumber,
       });
 
-      Alert.alert(t('common.success'), t('editShipment.deleteOk'));
+      notification.success(t('editShipment.deleteOk'));
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert(t('common.error'), error.message);
+        notification.error(error.message);
       } else {
-        Alert.alert(t('common.error'), t('editShipment.deleteError'));
+        notification.error(t('editShipment.deleteError'));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  // Vuelve atras y, si no hay historial, abre el detalle de la carga.
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -314,12 +269,16 @@ export default function EditShipment() {
     });
   };
 
-  const getDateValue = (field: DateField) => {
+  const getDateValue = (field: DateFieldName) => {
     switch (field) {
       case 'etd':
         return etd;
       case 'eta':
         return eta;
+      case 'atd':
+        return atd;
+      case 'ata':
+        return ata;
       case 'documentaryCutoff':
         return documentaryCutoff;
       default:
@@ -327,13 +286,19 @@ export default function EditShipment() {
     }
   };
 
-  const setDateValue = (field: DateField, value: string) => {
+  const setDateValue = (field: DateFieldName, value: string) => {
     switch (field) {
       case 'etd':
         setEtd(value);
         break;
       case 'eta':
         setEta(value);
+        break;
+      case 'atd':
+        setAtd(value);
+        break;
+      case 'ata':
+        setAta(value);
         break;
       case 'documentaryCutoff':
         setDocumentaryCutoff(value);
@@ -343,119 +308,237 @@ export default function EditShipment() {
     }
   };
 
-  const openDatePicker = (field: DateField) => {
+  const openDatePicker = (field: DateFieldName) => {
     const currentValue = getDateValue(field);
-    const parsed = parseDateValue(currentValue);
+    const parsed = parseDateInputValue(currentValue);
     setDateDraft(parsed ?? new Date());
     setActiveDateField(field);
   };
 
-  const applyDateSelection = (field: DateField, date: Date) => {
-    const formatted = field === 'documentaryCutoff' ? formatDateTime(date) : formatDate(date);
+  const applyDateSelection = (field: DateFieldName, date: Date) => {
+    const formatted = isDateTimeField(field) ? formatDateTimeInputValue(date) : formatDateInputValue(date);
     setDateValue(field, formatted);
   };
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.orange} />
+      <View style={[styles.center, styles.container]}>
+        <AuthScreenBackground />
+        <ActivityIndicator size="large" color={AUTH_COLORS.orange} />
       </View>
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+  const rowStyle = [styles.row, !isDesktop && styles.rowMobile];
+  const fieldStyle = [styles.fieldContainer, !isDesktop && styles.fieldContainerMobile];
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('editShipment.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
-              <Text style={[styles.topActionText, saving && styles.disabled]}>
-                {saving ? t('editShipment.saving') : t('editShipment.save')}
+  return (
+    <View style={[styles.container, { minHeight: height }]}>
+      <AuthScreenBackground />
+      <Header
+        isDesktop= {isDesktop}
+        title={t('editShipment.headerTitle')}
+        onToggleLanguage={manageLanguage}
+        showSearch = {false}
+      />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.heroCard, styles.shadowCard, !isDesktop && styles.heroCardMobile]}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroTitle}>{doNumber || t('shipmentForm.labels.doNumber')}</Text>
+              <Text style={styles.heroMeta}>
+                {currentStatus || t('shipmentForm.labels.status')}
+                {currentLocation ? ` · ${currentLocation}` : ''}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleDelete} disabled={saving}>
-              <Text style={[styles.topActionText, styles.deleteText, saving && styles.disabled]}>
-                {t('editShipment.deleteTitle')}
-              </Text>
-            </TouchableOpacity>
+            </View>
+            <View style={[styles.heroActions, !isDesktop && styles.heroActionsMobile]}>
+              <TouchableOpacity style={[styles.secondaryButton, !isDesktop && styles.actionButtonMobile, saving && styles.buttonDisabled]} onPress={handleDelete} disabled={saving}>
+                <Ionicons name="trash-outline" size={18} color={AUTH_COLORS.danger} />
+                <Text style={styles.secondaryButtonDangerText}>{t('common.delete')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.primaryButton, !isDesktop && styles.actionButtonMobile, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+                <Ionicons name="save-outline" size={18} color={AUTH_COLORS.primaryText} />
+                <Text style={styles.primaryButtonText}>
+                  {saving ? t('editShipment.saving') : t('common.save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.form}>
-          <InputField label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} onSubmitEditing={handleSave} />
-          <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
-          <InputField label={t('shipmentForm.labels.status')} value={currentStatus} onChangeText={setCurrentStatus} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.exporter')} value={exporter} onChangeText={setExporter} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.consignee')} value={consignee} onChangeText={setConsignee} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} onSubmitEditing={handleSave} />
-          <DateField label={t('shipmentForm.labels.etd')} value={etd} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
-          <DateField label={t('shipmentForm.labels.eta')} value={eta} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
-          <DateField
-            label={t('shipmentForm.labels.documentaryCutoff')}
-            value={documentaryCutoff}
-            placeholder={t('shipmentForm.placeholders.dateTime')}
-            onPress={() => openDatePicker('documentaryCutoff')}
-            onChangeText={setDocumentaryCutoff}
-            mode="datetime"
-          />
-          <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
-          <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
-          <InputField
-            label={t('shipmentForm.labels.freeDays')}
-            value={freeDays}
-            onChangeText={setFreeDays}
-            keyboardType="numeric"
-            onSubmitEditing={handleSave}
-          />
-          <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
-          <SelectField
-            label={t('shipmentForm.labels.inspectionStatus')}
-            value={inspectionStatus}
-            onValueChange={setInspectionStatus}
-            options={inspectionStatusOptions}
-            placeholder={t('shipmentForm.placeholders.inspectionStatus')}
-          />
-          <InputField label={t('shipmentForm.labels.awb')} value={airWaybill} onChangeText={setAirWaybill} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.flight')} value={flightVessel} onChangeText={setFlightVessel} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.container')} value={containerNumber} onChangeText={setContainerNumber} onSubmitEditing={handleSave} />
-          <InputField label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} onSubmitEditing={handleSave} />
+        <View style={[styles.form, styles.shadowCard, !isDesktop && styles.formMobile]}>
+          <FormSection title={t('shipmentForm.sections.shipmentInfo')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField
+                  label={t('shipmentForm.labels.via')}
+                  value={shipmentType}
+                  onValueChange={setShipmentType}
+                  options={shipmentTypeOptions}
+                  placeholder={t('shipmentForm.placeholders.via')}
+                />
+              </View>
+            </View>
 
-          <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder={t('shipmentForm.placeholders.observation')}
-            placeholderTextColor={COLORS.placeholder}
-            value={observation}
-            onChangeText={setObservation}
-            multiline
-            numberOfLines={4}
-          />
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
+              </View>
+              <View style={fieldStyle}>
+                <View/>
+              </View>
+              <View style={fieldStyle}>
+                <View/>
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.dates')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.etd')} value={etd} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.atd')} value={atd} placeholder={t('shipmentForm.placeholders.dateTime')} onPress={() => openDatePicker('atd')} onChangeText={setAtd} mode="datetime" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.eta')} value={eta} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.ata')} value={ata} placeholder={t('shipmentForm.placeholders.dateTime')} onPress={() => openDatePicker('ata')} onChangeText={setAta} mode="datetime" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField
+                  label={t('shipmentForm.labels.documentaryCutoff')}
+                  value={documentaryCutoff}
+                  placeholder={t('shipmentForm.placeholders.dateTime')}
+                  onPress={() => openDatePicker('documentaryCutoff')}
+                  onChangeText={setDocumentaryCutoff}
+                  mode="datetime"
+                />
+              </View>
+              <View style={fieldStyle}>
+                <InputField
+                  label={t('shipmentForm.labels.freeDays')}
+                  value={freeDays}
+                  onChangeText={setFreeDays}
+                  keyboardType="numeric"
+                  onSubmitEditing={handleSave}
+                />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.tracking')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.status')} value={currentStatus} onValueChange={setCurrentStatus} options={statusOptionsWithCurrentValue} placeholder={t('shipmentForm.placeholders.status')} helperText={operationTypeHint} />
+              </View>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.inspectionStatus')} value={inspectionStatus} onValueChange={setInspectionStatus} options={inspectionStatusOptions} placeholder={t('shipmentForm.placeholders.inspectionStatus')} />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.parties')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.exporter')} value={exporter} onChangeText={setExporter} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.consignee')} value={consignee} onChangeText={setConsignee} onSubmitEditing={handleSave} />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.transport')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.awb')} value={airWaybill} onChangeText={setAirWaybill} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.flight')} value={flightVessel} onChangeText={setFlightVessel} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.container')} value={containerNumber} onChangeText={setContainerNumber} onSubmitEditing={handleSave} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <InputField label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} onSubmitEditing={handleSave} />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.notes')}>
+            <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder={t('shipmentForm.placeholders.observation')}
+              placeholderTextColor={AUTH_COLORS.secondaryText}
+              value={observation}
+              onChangeText={setObservation}
+              multiline
+              numberOfLines={4}
+            />
+          </FormSection>
         </View>
 
         {Platform.OS !== 'web' && activeDateField ? (
           <View style={Platform.OS === 'ios' ? styles.datePickerCard : undefined}>
             <DateTimePicker
               value={dateDraft}
-              mode={activeDateField === 'documentaryCutoff' && Platform.OS === 'ios' ? 'datetime' : 'date'}
+              mode={isDateTimeField(activeDateField) && Platform.OS === 'ios' ? 'datetime' : 'date'}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={(event, selectedDate) => {
                 if (!activeDateField) return;
@@ -466,7 +549,7 @@ export default function EditShipment() {
 
                 const nextDate = selectedDate ?? dateDraft;
 
-                if (Platform.OS === 'android' && activeDateField === 'documentaryCutoff') {
+                if (Platform.OS === 'android' && isDateTimeField(activeDateField)) {
                   setDateDraft(nextDate);
                   setActiveDateField(null);
                   setAndroidTimeField(activeDateField);
@@ -515,7 +598,20 @@ type InputFieldProps = {
   keyboardType?: 'default' | 'numeric' | 'email-address';
 };
 
-// Componente reutilizable para evitar repetir etiqueta + input.
+type FormSectionProps = {
+  title: string;
+  children: ReactNode;
+};
+
+function FormSection({ title, children }: FormSectionProps) {
+  return (
+    <View style={styles.formSection}>
+      <Text style={styles.formSectionTitle}>{title}</Text>
+      <View>{children}</View>
+    </View>
+  );
+}
+
 function InputField({ label, value, onChangeText, onSubmitEditing, keyboardType }: InputFieldProps) {
   return (
     <>
@@ -536,13 +632,14 @@ type SelectFieldProps = {
   label: string;
   value: string;
   onValueChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
+  options: { label: string; value: string }[];
   placeholder: string;
+  helperText?: string;
 };
 
-function SelectField({ label, value, onValueChange, options, placeholder }: SelectFieldProps) {
+function SelectField({ label, value, onValueChange, options, placeholder, helperText }: SelectFieldProps) {
   const isWeb = Platform.OS === 'web';
-  const displayColor = value ? COLORS.blueDark : COLORS.placeholder;
+  const displayColor = value ? AUTH_COLORS.primaryText : AUTH_COLORS.secondaryText;
   return (
     <>
       <Text style={styles.label}>{label}</Text>
@@ -552,14 +649,15 @@ function SelectField({ label, value, onValueChange, options, placeholder }: Sele
           onValueChange={(itemValue) => onValueChange(String(itemValue))}
           style={[styles.picker, isWeb && styles.pickerWeb, { color: displayColor }]}
           itemStyle={isWeb ? styles.pickerItemWeb : undefined}
-          dropdownIconColor={COLORS.blueDark}
+          dropdownIconColor={AUTH_COLORS.primaryText}
         >
-          <Picker.Item label={placeholder} value="" color={COLORS.placeholder} />
+          <Picker.Item label={placeholder} value="" color={AUTH_COLORS.secondaryText} />
           {options.map((option) => (
             <Picker.Item key={option.value} label={option.label} value={option.value} />
           ))}
         </Picker>
       </View>
+      {helperText ? <Text style={styles.helperText}>{helperText}</Text> : null}
     </>
   );
 }
@@ -583,8 +681,12 @@ const webDateInputStyle: CSSProperties = {
 
 const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
   if (!value) return '';
-  if (mode === 'date') return value;
-  return value.includes(' ') ? value.replace(' ', 'T') : value;
+  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+  if (mode === 'date') return normalized.length >= 10 ? normalized.slice(0, 10) : normalized;
+  const localDateTime = normalized.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
+  if (localDateTime) return localDateTime;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? normalized : formatDateTimeInputValue(parsed).replace(' ', 'T');
 };
 
 const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {
@@ -605,7 +707,7 @@ function DateField({ label, value, placeholder, onPress, onChangeText, mode }: D
           style={{
             ...webInputStyle,
             ...webDateInputStyle,
-            color: value ? COLORS.blueDark : COLORS.placeholder,
+            color: value ? AUTH_COLORS.primaryText : AUTH_COLORS.secondaryText,
           }}
           placeholder={placeholder}
           value={toWebDateValue(value, mode)}
@@ -620,101 +722,165 @@ function DateField({ label, value, placeholder, onPress, onChangeText, mode }: D
   }
 
   return (
-    <>
+    <View style={styles.column}>
       <Text style={styles.label}>{label}</Text>
       <TouchableOpacity style={[styles.input, styles.inputPressable]} onPress={onPress} activeOpacity={0.8}>
         <Text style={[styles.dateText, !value && styles.placeholderText]}>{value || placeholder}</Text>
       </TouchableOpacity>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Clase personalizada: imagen de fondo de pantalla completa.
-  background: { width: '100%', height: '100%' },
-  // Clase personalizada: contenedor raiz de pantalla.
-  container: { flex: 1, backgroundColor: 'transparent' },
-  // Clase personalizada: scroll principal del formulario.
-  scroll: { flex: 1 },
-  // Clase personalizada: area interna separada del header.
-  content: { zIndex: 1, paddingBottom: 20, paddingTop: 72 },
-  // Clase personalizada: centrado para estado de carga inicial.
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  // Clase personalizada: encabezado fijo con acciones volver/guardar.
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
+  container: {
+    flex: 1,
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  // Clase personalizada: fila del header con logo/titulo/acciones.
-  headerRow: {
-    flexDirection: 'row',
+  center: {
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+  },
+  scroll: { flex: 1 },
+  content: {
+    gap: 18,
+    paddingBottom: 28,
+  },
+  contentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+  },
+  contentMobile: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+  },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+  shadowCard: AUTH_SHADOW,
+  heroCard: {
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    padding: 22,
+    gap: 18,
+  },
+  heroCardMobile: {
+    padding: 16,
+    borderRadius: 20,
+  },
+  heroTop: {
+    gap: 16,
+  },
+  heroCopy: {
+    gap: 4,
+  },
+  heroTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 30,
+    fontWeight: '800',
+  },
+  heroMeta: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
-  // Clase personalizada: titulo del encabezado.
-  headerTitle: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+  heroActionsMobile: {
+    flexDirection: 'column',
   },
-  // Clase personalizada: fila de acciones en header.
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  // Clase personalizada: texto de acciones superiores.
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
-  // Clase personalizada: opacidad reducida para accion deshabilitada.
-  disabled: { opacity: 0.5 },
-  // Clase personalizada: color de accion destructiva.
-  deleteText: { color: '#9F1D20' },
-  // Clase personalizada: tarjeta del formulario.
   form: {
-    margin: 16,
-    padding: 20,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+    padding: 18,
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: AUTH_COLORS.line,
+    gap: 20,
   },
-  // Clase personalizada: etiqueta de campo.
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10, color: COLORS.blueDark },
-  // Clase personalizada: input base para editar campos.
+  formMobile: {
+    padding: 14,
+    borderRadius: 20,
+  },
+  formSection: {
+    gap: 8,
+  },
+  formSectionTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 16,
+    fontWeight: '800',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: AUTH_COLORS.line,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    gap: 10,
+  },
+  rowMobile: {
+    flexDirection: 'column',
+    gap: 0,
+  },
+  fieldContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  fieldContainerMobile: {
+    flex: undefined,
+    width: '100%',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 14,
+    marginBottom: 6,
+    marginTop: 10,
+    color: AUTH_COLORS.secondaryText,
+  },
+  helperText: {
+    fontSize: 12,
+    color: AUTH_COLORS.blue,
+    marginTop: 6,
+    marginBottom: 2,
+    fontWeight: '600',
+  },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
+    borderColor: AUTH_COLORS.line,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     fontSize: 16,
-    backgroundColor: COLORS.cream,
-    color: COLORS.blueDark,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    color: AUTH_COLORS.primaryText,
     minHeight: 48,
   },
   inputPressable: {
     justifyContent: 'center',
   },
-  dateText: { fontSize: 16, color: COLORS.blueDark },
-  placeholderText: { color: COLORS.placeholder },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  dateText: {
+    fontSize: 16,
+    color: AUTH_COLORS.primaryText,
+  },
+  placeholderText: {
+    color: AUTH_COLORS.secondaryText,
+  },
+  column: {
+    flexDirection: 'column',
+  },
   pickerWrapper: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
-    borderRadius: 8,
-    backgroundColor: COLORS.cream,
+    borderColor: AUTH_COLORS.line,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
     overflow: 'hidden',
     minHeight: 48,
     justifyContent: 'center',
@@ -724,10 +890,10 @@ const styles = StyleSheet.create({
   },
   picker: {
     width: '100%',
-    color: COLORS.blueDark,
+    color: AUTH_COLORS.primaryText,
     height: 48,
     fontSize: 16,
-    backgroundColor: COLORS.cream,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
     borderWidth: 0,
   },
   pickerWeb: {
@@ -738,24 +904,68 @@ const styles = StyleSheet.create({
   pickerItemWeb: {
     fontSize: 16,
   },
-  // Clase personalizada: variante multilinea para observacion.
-  textArea: { height: 100, textAlignVertical: 'top' },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+  },
+  actionButtonMobile: {
+    alignSelf: 'stretch',
+  },
+  primaryButtonText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  secondaryButtonDangerText: {
+    color: AUTH_COLORS.danger,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   datePickerCard: {
     marginHorizontal: 16,
     marginTop: 8,
+    marginBottom: 28,
     padding: 12,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: AUTH_COLORS.line,
   },
   dateDoneButton: {
     alignSelf: 'flex-end',
     marginTop: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: COLORS.blue,
+    backgroundColor: AUTH_COLORS.orangeSoft,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
   },
-  dateDoneText: { color: COLORS.cream, fontWeight: '700' },
+  dateDoneText: {
+    color: AUTH_COLORS.primaryText,
+    fontWeight: '700',
+  },
 });

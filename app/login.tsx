@@ -1,42 +1,45 @@
 // Archivo: app/login.tsx
 /*
-Pantalla de acceso por OTP de 6 dígitos.
-Solo permite solicitar código para correos registrados por usuarios internos.
-Flujo: paso 1 → ingresa correo → paso 2 → ingresa código de 6 dígitos
+Pantalla de acceso por OTP de 6 digitos.
+Solo permite solicitar codigo para correos registrados por usuarios internos.
+Flujo: paso 1 -> ingresa correo -> paso 2 -> ingresa codigo de 6 digitos
 */
-
+import Header from '@/components/Header';
+import { useResponsive } from '@/hooks/useResponsive';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import LogoCorner from '../components/LogoCorner';
-import { supabase } from '../lib/supabase';
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import {
+  AUTH_COLORS,
+  AUTH_SHADOW,
+  AuthScreenBackground,
+} from '../components/auth/AuthChrome';
+import { useNativeNotification } from '../components/ui/NativeNotification';
+import { supabase } from '../lib/URLs';
 
-const COLORS = {
-  blueMid: '#1862A0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-};
 
 export default function Login() {
   const { t } = useTranslation();
+  const notification = useNativeNotification();
+  const { height, isDesktop } = useResponsive();
+
+  const [cooldown, setCooldown] = useState(0)
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  // Controla en qué paso del flujo está el usuario.
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
 
-  // Paso 1: envía el código OTP al correo del usuario.
-  // shouldCreateUser: false garantiza que solo usuarios ya invitados
-  // puedan solicitar el código; rechaza correos no registrados.
   const handleSendCode = async () => {
+    if (cooldown > 0) return; 
     if (!email) {
-      Alert.alert(t('common.error'), t('login.missingEmail'));
+      notification.error(t('login.missingEmail'));
       return;
     }
     setLoading(true);
@@ -46,19 +49,16 @@ export default function Login() {
     });
     setLoading(false);
     if (error) {
-      Alert.alert(t('common.error'), error.message);
+      notification.error(getLoginRequestMessage(error.message, t('login.emailNotRegistered')));
     } else {
-      // Código enviado exitosamente, pasa al paso 2.
+      notification.success(t('login.codeSent'));
       setStep('code');
     }
   };
 
-  // Paso 2: verifica el código OTP ingresado por el usuario.
-  // Si es válido, Supabase establece la sesión automáticamente
-  // y el auth listener del layout redirige al dashboard.
   const handleVerifyCode = async () => {
     if (!code) {
-      Alert.alert(t('common.error'), t('login.missingCode'));
+      notification.error(t('login.missingCode'));
       return;
     }
     setLoading(true);
@@ -68,184 +68,193 @@ export default function Login() {
       type: 'email',
     });
     setLoading(false);
-    if (!error){
-      const {data: {session}}= await supabase.auth.getSession();
-      if (session){
-        router.replace('/');
+    if (!error) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        notification.success(t('login.success'));
+        router.replace('/newsMobile');
       }
     }
     if (error) {
-      Alert.alert(t('common.error'), error.message);
+      notification.error(getLoginVerifyMessage(error.message, t('login.invalidCode')));
     }
-    // Si no hay error, el auth listener redirige automáticamente.
+    setCooldown (60)
+    const interval = setInterval(() =>{
+      setCooldown(c => {if (c <= 1) clearInterval (interval); return c -1;})
+    })
   };
 
   return (
-    <View style={styles.container}>
-      <View style={StyleSheet.absoluteFill}>
-        <Image source={require('../visual/background.png')} style={styles.background} resizeMode="cover" />
-      </View>
-
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('login.headerTitle')}
-          </Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </View>
+    <View style={[styles.container, { minHeight: height }]}>
+      <AuthScreenBackground />
+      <Header 
+        title={t('login.headerTitle')} 
+        showSearch = {false}
+        isDesktop={isDesktop} 
+      />
 
       <View style={styles.content}>
-        <Text style={styles.title}>{t('login.title')}</Text>
-        <Text style={styles.subtitle}>
-          {step === 'email' ? t('login.subtitle') : t('login.enterCode')}
-        </Text>
+        <View style={[styles.card, styles.shadowCard, isDesktop && styles.cardDesktop]}>
+          <Text style={styles.title}>{t('login.title')}</Text>
+          <Text style={styles.subtitle}>
+            {step === 'email' ? t('login.subtitle') : t('login.enterCode')}
+          </Text>
 
-        {step === 'email' ? (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder={t('login.emailPlaceholder')}
-              placeholderTextColor={COLORS.placeholder}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={handleSendCode}
-            />
-            <TouchableOpacity style={styles.button} onPress={handleSendCode} disabled={loading}>
-              <Text style={styles.buttonText}>
-                {loading ? t('common.sending') : t('login.sendCode')}
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder="000000"
-              placeholderTextColor={COLORS.placeholder}
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              maxLength={6}
-              returnKeyType="done"
-              onSubmitEditing={handleVerifyCode}
-            />
-            <TouchableOpacity style={styles.button} onPress={handleVerifyCode} disabled={loading}>
-              <Text style={styles.buttonText}>
-                {loading ? t('common.verifying') : t('login.verify')}
-              </Text>
-            </TouchableOpacity>
-            {/* Permite volver al paso 1 para cambiar el correo. */}
-            <TouchableOpacity onPress={() => { setStep('email'); setCode(''); }} style={styles.backLink}>
-              <Text style={styles.backLinkText}>{t('login.changeEmail')}</Text>
-            </TouchableOpacity>
-          </>
-        )}
+          {step === 'email' ? (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder={t('login.emailPlaceholder')}
+                placeholderTextColor={AUTH_COLORS.secondaryText}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={handleSendCode}
+              />
+              <TouchableOpacity style={styles.button} onPress={handleSendCode} disabled={loading}>
+                <Text style={styles.buttonText}>
+                  {loading ? t('common.sending') : t('login.sendCode')}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="000000"
+                placeholderTextColor={AUTH_COLORS.secondaryText}
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                returnKeyType="done"
+                onSubmitEditing={handleVerifyCode}
+              />
+              <TouchableOpacity style={styles.button} onPress={handleVerifyCode} disabled={loading}>
+                <Text style={styles.buttonText}>
+                  {loading ? t('common.verifying') : t('login.verify')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setStep('email');
+                  setCode('');
+                }}
+                style={styles.backLink}
+              >
+                <Text style={styles.backLinkText}>{t('login.changeEmail')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
     </View>
   );
 }
 
+function getLoginRequestMessage(message: string, fallback: string) {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('signups not allowed') ||
+    normalized.includes('user not found') ||
+    normalized.includes('not registered')
+  ) {
+    return fallback;
+  }
+  console.log (message)
+  return message;
+}
+
+
+function getLoginVerifyMessage(message: string, fallback: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('token') || normalized.includes('otp') || normalized.includes('invalid')) {
+    return fallback;
+  }
+  return message;
+}
+
 const styles = StyleSheet.create({
-  content: {
-    zIndex: 1,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 14,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginTop: 72,
-  },
-  background: { width: '100%', height: '100%' },
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-    backgroundColor: 'transparent',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  content: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerSpacer: { minWidth: 60 },
+  shadowCard: AUTH_SHADOW,
+  card: {
+    width: '100%',
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    padding: 22,
+  },
+  cardDesktop: {
+    maxWidth: 520,
+    padding: 28,
+  },
   title: {
-    color: COLORS.blueDark,
+    color: AUTH_COLORS.primaryText,
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '800',
     marginBottom: 10,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginBottom: 30,
+    fontSize: 15,
+    color: AUTH_COLORS.secondaryText,
+    marginBottom: 26,
     textAlign: 'center',
+    lineHeight: 22,
   },
   input: {
-    backgroundColor: COLORS.cream,
-    borderColor: COLORS.blueMid,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderColor: AUTH_COLORS.line,
     borderWidth: 1,
-    color: COLORS.blueDark,
+    color: AUTH_COLORS.primaryText,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 14,
     fontSize: 16,
-    minHeight: 48,
-    marginBottom: 20,
+    minHeight: 52,
+    marginBottom: 18,
   },
   button: {
-    backgroundColor: COLORS.orange,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.orangeSoft,
     alignItems: 'center',
-    width: '100%',
-    minHeight: 56,
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
   },
   buttonText: {
-    color: COLORS.blueDark,
-    fontSize: 16,
-    fontWeight: '600',
+    color: AUTH_COLORS.primaryText,
+    fontSize: 15,
+    fontWeight: '700',
     textAlign: 'center',
     width: '100%',
-    lineHeight: 22,
-    flexShrink: 1,
   },
   backLink: {
     marginTop: 16,
     alignItems: 'center',
   },
   backLinkText: {
-    color: COLORS.blueMid,
+    color: AUTH_COLORS.blue,
     fontSize: 14,
+    fontWeight: '600',
     textDecorationLine: 'underline',
   },
 });

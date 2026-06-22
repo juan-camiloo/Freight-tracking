@@ -39,13 +39,14 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 0,
+    right: 'auto',
     left: 16,
-
   },
   inlineWrapper: {
     position: 'relative',
-    top: undefined,
-    left: undefined,
+    top: 'auto',
+    right: 'auto',
+    left: 'auto',
   },
 // Clase personalizada: estilo 'logo' para ajustar apariencia y disposicion del componente.
   logo: {

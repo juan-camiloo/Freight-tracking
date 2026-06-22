@@ -8,35 +8,27 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import LogoCorner from '../../components/LogoCorner';
-import { createTicketFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
+import {
+    AUTH_COLORS,
+    AUTH_SHADOW,
+    AuthHeader,
+    AuthHeaderAction,
+    AuthScreenBackground,
+} from '../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
+import { useNativeNotification } from '../../components/ui/NativeNotification';
+import { useResponsive } from '../../hooks/useResponsive';
+import { createTicketFunctionUrl, supabase, supabaseAnonKey } from '../../lib/URLs';
 
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-};
-
-const HEADER_HEIGHT = 100;
-
-// Extrae un posible DO desde texto libre.
 const extractDoNumber = (message: string) => {
   const patterns = [/x[- ]?\d+/i, /m[- ]?\d+/i, /\b\d{5,}\b/];
   for (const pattern of patterns) {
@@ -53,6 +45,10 @@ type CategoryOption = {
 
 export default function CreateTicketScreen() {
   const { t } = useTranslation();
+  const notification = useNativeNotification();
+  const { height, isDesktop } = useResponsive();
+  const keyboardOffset = Platform.OS === 'ios' ? 48 : 0;
+
   const categories = useMemo<CategoryOption[]>(
     () => [
       { id: 'administrative', label: t('chat.options.administrative') },
@@ -106,11 +102,11 @@ export default function CreateTicketScreen() {
   const handleCreateTicket = async () => {
     const cleanMessage = message.trim();
     if (!cleanMessage) {
-      Alert.alert(t('common.error'), t('ticketCreateScreen.missingMessage'));
+      notification.error(t('ticketCreateScreen.missingMessage'));
       return;
     }
     if (!selectedCategory) {
-      Alert.alert(t('common.error'), t('ticketCreateScreen.missingCategory'));
+      notification.error(t('ticketCreateScreen.missingCategory'));
       return;
     }
 
@@ -122,7 +118,7 @@ export default function CreateTicketScreen() {
 
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
-        Alert.alert(t('common.error'), t('createTicket.invalidSession'));
+        notification.error(t('createTicket.invalidSession'));
         return;
       }
 
@@ -147,16 +143,13 @@ export default function CreateTicketScreen() {
         throw new Error(errorMessage);
       }
 
-      Alert.alert(t('ticketCreateScreen.successTitle'), t('ticketCreateScreen.successBody'));
+      notification.success(t('ticketCreateScreen.successBody'), t('ticketCreateScreen.successTitle'));
       setMessage('');
       setDoNumber('');
       setSelectedCategory(null);
       router.replace('/');
     } catch (error) {
-      Alert.alert(
-        t('common.error'),
-        error instanceof Error ? error.message : t('chat.ticketCreateFailed'),
-      );
+      notification.error(error instanceof Error ? error.message : t('chat.ticketCreateFailed'));
     } finally {
       setSending(false);
     }
@@ -166,34 +159,28 @@ export default function CreateTicketScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_HEIGHT : 0}
+      style={[styles.container, { minHeight: height }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={keyboardOffset}
     >
-      <View style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+      <AuthScreenBackground />
+      <AuthHeader
+        title={t('dashboard.fabCreateTicket')}
+        isDesktop={isDesktop}
+        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+      />
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('ticketCreateScreen.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.card, styles.shadowCard, isDesktop && styles.cardDesktop]}>
           <Text style={styles.cardTitle}>{t('ticketCreateScreen.title')}</Text>
           <Text style={styles.cardSubtitle}>{t('ticketCreateScreen.subtitle')}</Text>
 
@@ -201,18 +188,18 @@ export default function CreateTicketScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder={t('ticketCreateScreen.messagePlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
+            placeholderTextColor={AUTH_COLORS.secondaryText}
             value={message}
             onChangeText={setMessage}
             multiline
-            numberOfLines={4}
+            numberOfLines={5}
           />
 
           <Text style={styles.label}>{t('ticketCreateScreen.doLabel')}</Text>
           <TextInput
             style={styles.input}
             placeholder={t('ticketCreateScreen.doPlaceholder')}
-            placeholderTextColor={COLORS.placeholder}
+            placeholderTextColor={AUTH_COLORS.secondaryText}
             value={doNumber}
             onChangeText={setDoNumber}
             autoCapitalize="characters"
@@ -245,7 +232,7 @@ export default function CreateTicketScreen() {
             disabled={submitDisabled}
           >
             <Text style={styles.submitText}>
-              {sending ? t('ticketCreateScreen.submitting') : t('ticketCreateScreen.submit')}
+              {sending ? t('ticketCreateScreen.submitting') : t('dashboard.fabCreateTicket')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -255,86 +242,121 @@ export default function CreateTicketScreen() {
 }
 
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent' },
-  scroll: { flex: 1 },
-  content: { zIndex: 1, paddingTop: 110, paddingBottom: 20 },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  container: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  topActions: {
-    flexDirection: 'row',
+  scroll: { flex: 1 },
+  content: {
+    gap: 18,
+    paddingBottom: 28,
+  },
+  contentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
     alignItems: 'center',
-    gap: 8,
-    minWidth: 60,
   },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
+  contentMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
   card: {
-    margin: 16,
-    padding: 20,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+    width: '100%',
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: AUTH_COLORS.line,
+    padding: 18,
   },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: COLORS.blueDark },
-  cardSubtitle: { marginTop: 6, marginBottom: 16, color: COLORS.textSecondary, fontSize: 13, lineHeight: 18 },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 10, color: COLORS.blueDark },
-  helper: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 10 },
+  cardDesktop: {
+    maxWidth: 820,
+    padding: 24,
+  },
+  shadowCard: AUTH_SHADOW,
+  cardTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  cardSubtitle: {
+    marginTop: 6,
+    marginBottom: 8,
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+    marginTop: 10,
+    color: AUTH_COLORS.secondaryText,
+  },
+  helper: {
+    fontSize: 12,
+    color: AUTH_COLORS.secondaryText,
+    marginBottom: 10,
+  },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
+    borderColor: AUTH_COLORS.line,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     fontSize: 16,
-    backgroundColor: COLORS.cream,
-    color: COLORS.blueDark,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    color: AUTH_COLORS.primaryText,
     minHeight: 48,
   },
-  textArea: { height: 110, textAlignVertical: 'top' },
-  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  textArea: {
+    height: 132,
+    textAlignVertical: 'top',
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   categoryChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
-    backgroundColor: COLORS.cream,
+    borderColor: AUTH_COLORS.line,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
   },
-  categoryChipActive: { backgroundColor: COLORS.orange, borderColor: COLORS.orange },
-  categoryText: { color: COLORS.blueDark, fontSize: 13, fontWeight: '600' },
-  categoryTextActive: { color: COLORS.blueDark, fontWeight: '700' },
+  categoryChipActive: {
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderColor: AUTH_COLORS.orangeBorder,
+  },
+  categoryText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  categoryTextActive: {
+    fontWeight: '700',
+  },
   submitButton: {
-    backgroundColor: COLORS.blue,
-    padding: 14,
-    borderRadius: 10,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: AUTH_COLORS.orangeSoft,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
     marginTop: 20,
   },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitText: { color: COLORS.cream, fontSize: 16, fontWeight: '700' },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

@@ -3,13 +3,13 @@
 // - Mostrar conversacion con asistente de cargas (estado local).
 // - Enviar mensajes a la Edge Function `chat-assistant`.
 
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -18,8 +18,20 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import LogoCorner from '../../components/LogoCorner';
-import { chatAssistantFunctionUrl, createTicketFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
+import {
+  AUTH_COLORS,
+  AUTH_SHADOW,
+  AuthHeaderAction,
+  AuthScreenBackground,
+} from '../../components/auth/AuthChrome';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
+import { useResponsive } from '../../hooks/useResponsive';
+import {
+  chatAssistantFunctionUrl,
+  createTicketFunctionUrl,
+  supabase,
+  supabaseAnonKey,
+} from '../../lib/URLs';
 
 type ChatMessage = {
   id: string;
@@ -27,34 +39,10 @@ type ChatMessage = {
   text: string | undefined;
 };
 
-const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
-  bubbleAssistant: '#FFFFFF',
-  bubbleUser: '#1E5F99',
-};
-
-const HEADER_HEIGHT = 100;
-
-// Tiempo de inactividad antes de advertir y luego cerrar el chat.
 const INACTIVITY_MS = 5 * 60 * 1000;
 
-// Extrae un posible DO desde texto libre.
 const extractDoNumber = (message: string) => {
-  const patterns = [
-    /x[- ]?\d+/i,    
-    /m[- ]?\d+/i,
-    /X[- ]?\d+/i,
-    /M[- ]?\d+/i,
-    /\b\d{5,}\b/
-  ]
+  const patterns = [/x[- ]?\d+/i, /m[- ]?\d+/i, /X[- ]?\d+/i, /M[- ]?\d+/i, /\b\d{5,}\b/];
   for (const pattern of patterns) {
     const match = message.match(pattern);
     if (match) return match[0].toLowerCase();
@@ -64,6 +52,9 @@ const extractDoNumber = (message: string) => {
 
 export default function ChatAssistantScreen() {
   const { t } = useTranslation();
+  const { height, isDesktop } = useResponsive();
+  const keyboardOffset = Platform.OS === 'ios' ? 48 : 0;
+
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const welcomeMessage = useMemo<ChatMessage>(
     () => ({
@@ -74,14 +65,14 @@ export default function ChatAssistantScreen() {
     [t],
   );
   const categories = [
-  {id: "administrative", label: t('chat.options.administrative')},
-  {id: "facturation", label: t('chat.options.facturation')},
-  {id: "comercial", label: t('chat.options.comercial')},
-  {id: "pricing", label: t('chat.options.pricing')},
-  {id: "maritime", label: t('chat.options.maritime')},
-  {id: "air", label: t('chat.options.air')},
-  {id: "other", label: t('chat.options.other')}
-]
+    { id: 'administrative', label: t('chat.options.administrative') },
+    { id: 'facturation', label: t('chat.options.facturation') },
+    { id: 'comercial', label: t('chat.options.comercial') },
+    { id: 'pricing', label: t('chat.options.pricing') },
+    { id: 'maritime', label: t('chat.options.maritime') },
+    { id: 'air', label: t('chat.options.air') },
+    { id: 'other', label: t('chat.options.other') },
+  ];
   const recommendations = useMemo(
     () => [
       t('chat.recommendationEta'),
@@ -91,30 +82,22 @@ export default function ChatAssistantScreen() {
     ],
     [t],
   );
-  // Referencias para controlar timers de inactividad.
+
   const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Historial local (no se guarda en DB).
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
-  // Texto actual en el input.
   const [input, setInput] = useState('');
-  // Flag de envio para evitar doble submit.
   const [sending, setSending] = useState(false);
-  // DO detectado en la conversacion.
   const [doNumber, setDoNumber] = useState<string | null>(null);
-  // Gestión de creación de tickets
-  const ticketMessage = useRef<string | undefined>(undefined)
+  const ticketMessage = useRef<string | undefined>(undefined);
   const [shouldShowTicketOption, setShouldShowTicketOption] = useState<boolean>(false);
   const [shouldShowCategoryOptions, setShouldShowCategoryOptions] = useState<boolean>(false);
-  const [selectedCategory, setSelectedCategory] = useState <string | null>(null);
 
-  // Se usa para ocultar recomendaciones luego del primer mensaje del usuario.
   const hasUserMessages = useMemo(
     () => messages.some((message) => message.role === 'user'),
     [messages],
   );
 
-  // Verifica que haya sesion activa; si no, vuelve al login.
   const ensureSession = async () => {
     const {
       data: { user },
@@ -126,12 +109,10 @@ export default function ChatAssistantScreen() {
     }
   };
 
-  // Agrega mensaje al historial local.
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message]);
   }, []);
 
-  // Resetea el chat y vuelve a la pantalla principal.
   const closeChat = useCallback(() => {
     setMessages([welcomeMessage]);
     setInput('');
@@ -139,7 +120,6 @@ export default function ChatAssistantScreen() {
     router.replace('/');
   }, [welcomeMessage]);
 
-  // Reinicia timers de inactividad en cada accion del usuario.
   const markActivity = useCallback(() => {
     if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
@@ -155,13 +135,12 @@ export default function ChatAssistantScreen() {
         closeChat();
       }, INACTIVITY_MS);
     }, INACTIVITY_MS);
-  }, [appendMessage, closeChat]);
+  }, [appendMessage, closeChat, t]);
 
   useEffect(() => {
     void ensureSession();
   }, []);
 
-  // Inicializa y limpia timers de inactividad.
   useEffect(() => {
     markActivity();
     return () => {
@@ -175,7 +154,7 @@ export default function ChatAssistantScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated: true });
     });
-  }, [messages, sending, shouldShowTicketOption]);
+  }, [messages, sending, shouldShowTicketOption, shouldShowCategoryOptions]);
 
   const resolveAnswerFromPayload = (payload: any) => {
     if (typeof payload?.answer_key === 'string') {
@@ -208,12 +187,10 @@ export default function ChatAssistantScreen() {
     (error as Error & { userMessage?: string }).userMessage = message;
     return error;
   };
-  
 
-  // Envia mensaje del usuario a la Edge Function.
   const sendMessage = async (text: string) => {
-    setShouldShowTicketOption(false)
-    
+    setShouldShowTicketOption(false);
+
     const clean = text.trim();
     if (!clean || sending) return;
 
@@ -223,11 +200,11 @@ export default function ChatAssistantScreen() {
       role: 'user',
       text: clean,
     };
-    appendMessage (userMessage);
+    appendMessage(userMessage);
     setInput('');
     setSending(true);
-    if (!ticketMessage.current){
-      ticketMessage.current= userMessage.text
+    if (!ticketMessage.current) {
+      ticketMessage.current = userMessage.text;
     }
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -238,16 +215,15 @@ export default function ChatAssistantScreen() {
         return;
       }
 
-      // Extrae DO del mensaje y lo mantiene en memoria.
       const extractedDo = extractDoNumber(clean);
       const resolvedDo = extractedDo || doNumber;
       if (extractedDo) setDoNumber(extractedDo);
-      // Limpiamos el DO del texto antes de enviarlo a la IA.
-      const cleanMessage = clean
-      .replace(/mi do es\s+\S+/gi, '')
-      .replace(/\bx\d+\b/gi, '')
-      .replace(/\bm\d+\b/gi, '')
-      .trim() || "¿Puedes darme la información que tengas sobre mi embarque?";
+      const cleanMessage =
+        clean
+          .replace(/mi do es\s+\S+/gi, '')
+          .replace(/\bx\d+\b/gi, '')
+          .replace(/\bm\d+\b/gi, '')
+          .trim() || '¿Puedes darme la información que tengas sobre mi embarque?';
 
       const response = await fetch(chatAssistantFunctionUrl, {
         method: 'POST',
@@ -272,9 +248,8 @@ export default function ChatAssistantScreen() {
         translatedAnswer ??
         (typeof data?.answer === 'string' ? data.answer : t('chat.assistantFallback'));
 
-      if (data.mode === "handoff"){
-
-        setShouldShowTicketOption(true)
+      if (data.mode === 'handoff') {
+        setShouldShowTicketOption(true);
       }
       appendMessage({
         id: `${Date.now()}-assistant`,
@@ -296,57 +271,55 @@ export default function ChatAssistantScreen() {
       setSending(false);
     }
   };
-  const handleCreateTicket = async (category:string) =>{
-    const {data: dataSession} = await supabase.auth.getSession()
-    const accessToken=dataSession.session?.access_token
+
+  const handleCreateTicket = async (category: string) => {
+    const { data: dataSession } = await supabase.auth.getSession();
+    const accessToken = dataSession.session?.access_token;
     if (!accessToken) return;
-    try{
-      const response = await fetch (createTicketFunctionUrl,{
-        method: "POST",
+    try {
+      const response = await fetch(createTicketFunctionUrl, {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           apikey: supabaseAnonKey,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: ticketMessage.current ?? '',
           do_number: doNumber || null,
           category: category || null,
-        }),          
-      })
-      if (!response.ok){
-        const errorMessage = await resolveErrorMessage(response, t('chat.ticketRequestError'))
-        throw buildUserMessageError(errorMessage)
+        }),
+      });
+      if (!response.ok) {
+        const errorMessage = await resolveErrorMessage(response, t('chat.ticketRequestError'));
+        throw buildUserMessageError(errorMessage);
       }
-      ticketMessage.current= undefined
+      ticketMessage.current = undefined;
       setShouldShowTicketOption(false);
-      
+
       appendMessage({
         id: `${Date.now()}-assistant`,
         role: 'assistant',
-        text: t('chat.createdTicket')
-      })
-  }catch (error){
-    appendMessage({
-      id: `${Date.now()}-assistant`,
-      role: 'assistant',
-      text: 
-        typeof (error as { userMessage?: string })?.userMessage === 'string'
-          ? (error as { userMessage?: string }).userMessage
-          : error instanceof Error
-            ? t('chat.ticketCreateFailedWithDetail', { message: error.message })
-            : t('chat.ticketCreateFailed')
-    })
-  }
-  }
+        text: t('chat.createdTicket'),
+      });
+    } catch (error) {
+      appendMessage({
+        id: `${Date.now()}-assistant`,
+        role: 'assistant',
+        text:
+          typeof (error as { userMessage?: string })?.userMessage === 'string'
+            ? (error as { userMessage?: string }).userMessage
+            : error instanceof Error
+              ? t('chat.ticketCreateFailedWithDetail', { message: error.message })
+              : t('chat.ticketCreateFailed'),
+      });
+    }
+  };
 
-  // Prellena input con una sugerencia.
   const handleSuggestionPress = (suggestion: string) => {
     markActivity();
     setInput(suggestion);
   };
-
-  
 
   const backFunction = () => {
     if (router.canGoBack()) {
@@ -358,150 +331,140 @@ export default function ChatAssistantScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_HEIGHT : 0}
+      style={[styles.container, { minHeight: height }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={keyboardOffset}
     >
-      <View style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+      <AuthScreenBackground />
+      <AuthHeader
+        title={t('dashboard.fabAssistant')}
+        isDesktop={isDesktop}
+        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+      />
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('chat.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.content}>
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.chatContent}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-              ]}
-            >
-              <Text
+      <View style={[styles.content, !isDesktop && styles.contentWithDock]}>
+        <View style={[styles.chatFrame, isDesktop && styles.chatFrameDesktop]}>
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            style={styles.chatList}
+            contentContainerStyle={styles.chatContent}
+            renderItem={({ item }) => (
+              <View
                 style={[
-                  styles.bubbleText,
-                  item.role === 'user' ? styles.userText : styles.assistantText,
+                  styles.bubble,
+                  item.role === 'user' ? styles.userBubble : styles.assistantBubble,
                 ]}
               >
-                {item.text}
-              </Text>
-            </View>
-          )}
-          ListFooterComponent={
-            sending || shouldShowTicketOption || shouldShowCategoryOptions ? (
-              <View style={styles.footer}>
-                {sending ? (
-                  <View style={[styles.bubble, styles.assistantBubble]}>
-                    <View style={styles.typingRow}>
-                      <ActivityIndicator size="small" color={COLORS.orange} />
-                      <Text style={styles.typingText}>{t('chat.typing')}</Text>
-                    </View>
-                  </View>
-                ) : null}
-                {shouldShowTicketOption ? (
-                  <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
-                    <Text style={styles.ticketPrompt}>{t('chat.createTicketOption')}</Text>
-                    <View style={styles.ticketActions}>
-                      <TouchableOpacity
-                        onPress={() => 
-                          {setShouldShowCategoryOptions(true)
-                          setShouldShowTicketOption(false)}}
-                        style={[styles.ticketButton, styles.ticketButtonPrimary]}
-                      >
-                        <Text style={styles.ticketButtonPrimaryText}>{t('common.yes')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setShouldShowTicketOption(false)}
-                        style={[styles.ticketButton, styles.ticketButtonSecondary]}
-                      >
-                        <Text style={styles.ticketButtonSecondaryText}>{t('common.no')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>     
-                ) : null}
-                {shouldShowCategoryOptions?(
-                  <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
-                    <Text style={styles.ticketPrompt}>{t('chat.categoryOptionsPrompt')}</Text>
-                    <View style={styles.ticketActions}>
-                      {categories.map((cat) =>(
-                      <TouchableOpacity
-                        key={cat.id}
-                        onPress= {()=>{
-                          setSelectedCategory(cat.id)
-                          setShouldShowCategoryOptions(false)
-                          handleCreateTicket(cat.id)
-                        }}
-                        style = {[styles.ticketButton, styles.ticketButtonPrimary]}
-                      >
-                      <Text style= {styles.ticketButtonPrimaryText}>{cat.label}</Text>
-                      </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                ): null} 
-              </View>
-            ) : null
-          }
-        />
-
-        {!hasUserMessages && (
-          <View style={styles.recommendations}>
-            <Text style={styles.recommendationsTitle}>{t('chat.recommendationsTitle')}</Text>
-            <View style={styles.recommendationsGrid}>
-              {recommendations.map((suggestion) => (
-                <TouchableOpacity
-                  key={suggestion}
-                  style={styles.recommendationChip}
-                  onPress={() => handleSuggestionPress(suggestion)}
+                <Text
+                  style={[
+                    styles.bubbleText,
+                    item.role === 'user' ? styles.userText : styles.assistantText,
+                  ]}
                 >
-                  <Text style={styles.recommendationText}>{suggestion}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-      
-        <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            placeholder={t('chat.placeholder')}
-            placeholderTextColor={COLORS.placeholder}
-            value={input}
-            onChangeText={(value) => {
-              markActivity();
-              setInput(value);
-            }}
-            onSubmitEditing={() => sendMessage(input)}
-            returnKeyType="send"
+                  {item.text}
+                </Text>
+              </View>
+            )}
+            ListFooterComponent={
+              sending || shouldShowTicketOption || shouldShowCategoryOptions ? (
+                <View style={styles.footer}>
+                  {sending ? (
+                    <View style={[styles.bubble, styles.assistantBubble]}>
+                      <View style={styles.typingRow}>
+                        <ActivityIndicator size="small" color={AUTH_COLORS.orange} />
+                        <Text style={styles.typingText}>{t('chat.typing')}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                  {shouldShowTicketOption ? (
+                    <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
+                      <Text style={styles.ticketPrompt}>{t('chat.createTicketOption')}</Text>
+                      <View style={styles.ticketActions}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setShouldShowCategoryOptions(true);
+                            setShouldShowTicketOption(false);
+                          }}
+                          style={[styles.ticketButton, styles.ticketButtonPrimary]}
+                        >
+                          <Text style={styles.ticketButtonPrimaryText}>{t('common.yes')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setShouldShowTicketOption(false)}
+                          style={[styles.ticketButton, styles.ticketButtonSecondary]}
+                        >
+                          <Text style={styles.ticketButtonSecondaryText}>{t('common.no')}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+                  {shouldShowCategoryOptions ? (
+                    <View style={[styles.bubble, styles.assistantBubble, styles.ticketCard]}>
+                      <Text style={styles.ticketPrompt}>{t('chat.categoryOptionsPrompt')}</Text>
+                      <View style={styles.ticketActions}>
+                        {categories.map((cat) => (
+                          <TouchableOpacity
+                            key={cat.id}
+                            onPress={() => {
+                              setShouldShowCategoryOptions(false);
+                              void handleCreateTicket(cat.id);
+                            }}
+                            style={[styles.ticketButton, styles.ticketButtonPrimary]}
+                          >
+                            <Text style={styles.ticketButtonPrimaryText}>{cat.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null
+            }
           />
-          <TouchableOpacity
-            style={[styles.sendButton, (!input.trim() || sending) && styles.sendButtonDisabled]}
-            onPress={() => sendMessage(input)}
-            disabled={!input.trim() || sending}
-          >
-            <Text style={styles.sendButtonText}>{sending ? t('chat.sending') : t('chat.send')}</Text>
-          </TouchableOpacity>
+
+          {!hasUserMessages ? (
+            <View style={[styles.recommendations, styles.shadowCard]}>
+              <Text style={styles.recommendationsTitle}>{t('chat.recommendationsTitle')}</Text>
+              <View style={styles.recommendationsGrid}>
+                {recommendations.map((suggestion) => (
+                  <TouchableOpacity
+                    key={suggestion}
+                    style={styles.recommendationChip}
+                    onPress={() => handleSuggestionPress(suggestion)}
+                  >
+                    <Text style={styles.recommendationText}>{suggestion}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          <View style={[styles.inputBar, styles.shadowCard]}>
+            <TextInput
+              style={styles.input}
+              placeholder={t('chat.placeholder')}
+              placeholderTextColor={AUTH_COLORS.secondaryText}
+              value={input}
+              onChangeText={(value) => {
+                markActivity();
+                setInput(value);
+              }}
+              onSubmitEditing={() => sendMessage(input)}
+              returnKeyType="send"
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!input.trim() || sending) && styles.sendButtonDisabled]}
+              onPress={() => sendMessage(input)}
+              disabled={!input.trim() || sending}
+            >
+              <Ionicons name="paper-plane-outline" size={18} color={AUTH_COLORS.primaryText} />
+              <Text style={styles.sendButtonText}>{sending ? t('common.sending') : t('chat.send')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -509,95 +472,127 @@ export default function ChatAssistantScreen() {
 }
 
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent' },
-  content: { flex: 1, zIndex: 1, paddingTop: 100, paddingBottom: 16 },
-  chatContent: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  container: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+    backgroundColor: AUTH_COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 60,
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 16,
   },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+  chatFrame: {
+    flex: 1,
+    gap: 14,
+  },
+  chatFrameDesktop: {
+    width: '100%',
+    maxWidth: 980,
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  chatList: {
+    flex: 1,
+  },
+  chatContent: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  shadowCard: AUTH_SHADOW,
   bubble: {
-    padding: 12,
-    borderRadius: 14,
-    maxWidth: '85%',
+    padding: 14,
+    borderRadius: 20,
+    maxWidth: '86%',
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: COLORS.bubbleAssistant,
+    backgroundColor: AUTH_COLORS.surface,
+    borderColor: AUTH_COLORS.line,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: COLORS.bubbleUser,
-    borderColor: COLORS.bubbleUser,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderColor: AUTH_COLORS.orangeBorder,
   },
-  bubbleText: { fontSize: 15, lineHeight: 20 },
-  assistantText: { color: COLORS.blueDark },
-  userText: { color: COLORS.cream },
-  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  typingText: { color: COLORS.textSecondary },
-  footer: { gap: 10 },
-  ticketCard: { gap: 10 },
-  ticketPrompt: { color: COLORS.blueDark, fontSize: 13, lineHeight: 18 },
-  ticketActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  bubbleText: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  assistantText: {
+    color: AUTH_COLORS.primaryText,
+  },
+  userText: {
+    color: AUTH_COLORS.primaryText,
+  },
+  typingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  typingText: {
+    color: AUTH_COLORS.secondaryText,
+  },
+  footer: {
+    gap: 10,
+    paddingTop: 2,
+  },
+  ticketCard: {
+    gap: 12,
+  },
+  ticketPrompt: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  ticketActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   ticketButton: {
+    minHeight: 38,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  ticketButtonPrimary: { backgroundColor: COLORS.orange, borderColor: COLORS.orange },
-  ticketButtonPrimaryText: { color: COLORS.blueDark, fontWeight: '700' },
-  ticketButtonSecondary: { backgroundColor: 'transparent', borderColor: COLORS.blueMid },
-  ticketButtonSecondaryText: { color: COLORS.blueDark, fontWeight: '600' },
+  ticketButtonPrimary: {
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderColor: AUTH_COLORS.orangeBorder,
+  },
+  ticketButtonPrimaryText: {
+    color: AUTH_COLORS.primaryText,
+    fontWeight: '700',
+  },
+  ticketButtonSecondary: {
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderColor: AUTH_COLORS.line,
+  },
+  ticketButtonSecondaryText: {
+    color: AUTH_COLORS.primaryText,
+    fontWeight: '600',
+  },
   recommendations: {
-    marginHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 10,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: COLORS.creamGlass,
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: AUTH_COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: AUTH_COLORS.line,
+    gap: 10,
   },
   recommendationsTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.blueDark,
-    marginBottom: 8,
+    fontWeight: '800',
+    color: AUTH_COLORS.primaryText,
   },
   recommendationsGrid: {
     flexDirection: 'row',
@@ -605,42 +600,58 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recommendationChip: {
-    backgroundColor: COLORS.cream,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderColor: AUTH_COLORS.line,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  recommendationText: { color: COLORS.blueDark, fontSize: 12 },
+  recommendationText: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,
-    marginHorizontal: 16,
     padding: 12,
-    borderRadius: 14,
-    backgroundColor: COLORS.creamGlass,
+    borderRadius: 22,
+    backgroundColor: AUTH_COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: AUTH_COLORS.line,
   },
   input: {
     flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: COLORS.cream,
-    borderRadius: 10,
-    color: COLORS.blueDark,
+    minHeight: 48,
+    maxHeight: 132,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderRadius: 14,
+    color: AUTH_COLORS.primaryText,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
   },
   sendButton: {
-    backgroundColor: COLORS.orange,
+    minHeight: 48,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 10,
-    minWidth: 60,
+    borderRadius: 14,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
-  sendButtonDisabled: { opacity: 0.6 },
-  sendButtonText: { color: COLORS.blueDark, fontWeight: '700', includeFontPadding: false,  },
+  sendButtonDisabled: {
+    opacity: 0.6,
+  },
+  sendButtonText: {
+    color: AUTH_COLORS.primaryText,
+    fontWeight: '700',
+  },
 });

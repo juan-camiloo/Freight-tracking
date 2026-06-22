@@ -7,7 +7,8 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
+import { AUTH_COLORS, AuthScreenBackground } from '../../components/auth/AuthChrome';
+import { supabase } from '../../lib/URLs';
 
 export default function AuthCallback() {
   useEffect(() => {
@@ -52,7 +53,6 @@ export default function AuthCallback() {
         router.replace(existingSession ? '/' : '/login');
 
       } catch (error) {
-        console.error('Auth callback error:', error);
         router.replace('/login');
       }
     };
@@ -76,8 +76,9 @@ export default function AuthCallback() {
   }, []);
 
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: AUTH_COLORS.backgroundBottom, overflow: 'hidden' }}>
+      <AuthScreenBackground />
+      <ActivityIndicator color={AUTH_COLORS.orange} />
     </View>
   );
 }

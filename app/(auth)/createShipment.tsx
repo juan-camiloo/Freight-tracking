@@ -4,103 +4,77 @@
 // - Validar campos minimos en cliente.
 // - Enviar payload a la Edge Function `create-shipment`.
 
+import i18n, { setAppLanguage } from '@/i18n';
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import { router } from 'expo-router';
-import { useState, type CSSProperties } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
 import LogoCorner from '../../components/LogoCorner';
-import { SHIPMENT_TYPE_OPTIONS } from '../../lib/shipmentType';
-import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/supabase';
+import { useNativeNotification } from '../../components/ui/NativeNotification';
+import { useResponsive } from '../../hooks/useResponsive';
+import { BOOKING_STATUSES, CARGO_TYPES, INCOTERMS, INSPECTION_STATUSES, SHIPMENT_TYPE_OPTIONS, getShipmentOperationLabelKey, getShipmentStatusOptions } from '../../lib/shipmentType';
+import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/URLs';
+import { formatDateInputValue, formatDateTimeInputValue, mergeDateAndTime, parseDateInputValue } from '../../utils/dateFormatting';
+import { resolveErrorMessage as resolveErrorMessageUtil } from '../../utils/errorHandling';
 
 const COLORS = {
-  blue: '#1E5F99',
-  blueMid: '#2B6AA0',
-  blueDark: '#1B2A3A',
-  orange: '#F28A07',
-  cream: '#FFF6EC',
-  creamGlass: 'rgba(255, 246, 236, 0.92)',
-  textSecondary: '#6B7C8F',
-  placeholder: '#8B98A6',
-  border: '#D7E3EE',
+  backgroundTop: '#2A3348',
+  backgroundBottom: '#1D2639',
+  surface: '#f5e3c5',
+  surfaceAlt: '#F9F5EF',
+  surfaceMuted: '#ECE5DB',
+  surfaceSoft: 'rgba(245, 241, 234, 0.94)',
+  primaryText: '#2B3242',
+  secondaryText: '#717887',
+  border: 'rgba(43, 50, 66, 0.12)',
+  line: '#D8D1C7',
+  orange: '#C78A4B',
+  orangeSoft: '#f5bc6c',
+  orangeBorder: '#E8C48D',
+  blue: '#4F688E',
+  blueSoft: '#D9E5F5',
+  white: '#FFFFFF',
+  shadow: 'rgba(16, 24, 40, 0.16)',
 };
 
-const INCOTERMS = [
-  { label: 'EXW', value: 'EXW' },
-  { label: 'FCA', value: 'FCA' },
-  { label: 'FAS', value: 'FAS' },
-  { label: 'FOB', value: 'FOB' },
-  { label: 'CFR', value: 'CFR' },
-  { label: 'CIF', value: 'CIF' },
-  { label: 'CPT', value: 'CPT' },
-  { label: 'CIP', value: 'CIP' },
-  { label: 'DAP', value: 'DAP' },
-  { label: 'DPU', value: 'DPU' },
-  { label: 'DDP', value: 'DDP' },
-];
+// constants moved to lib/shipmentType
 
-const CARGO_TYPES = [
-  { labelKey: 'shipmentForm.options.cargoType.general', value: 'general' },
-  { labelKey: 'shipmentForm.options.cargoType.dangerous', value: 'dangerous' },
-  { labelKey: 'shipmentForm.options.cargoType.perishable', value: 'perishable' },
-  { labelKey: 'shipmentForm.options.cargoType.refrigerated', value: 'refrigerated' },
-  { labelKey: 'shipmentForm.options.cargoType.chemicals', value: 'chemicals' },
-];
+type ShipmentDateField = 'etd' | 'eta' | 'atd' | 'ata' | 'documentaryCutoff';
 
-const BOOKING_STATUSES = [
-  { labelKey: 'shipmentForm.options.bookingStatus.pending', value: 'pending' },
-  { labelKey: 'shipmentForm.options.bookingStatus.confirmed', value: 'confirmed' },
-  { labelKey: 'shipmentForm.options.bookingStatus.rejected', value: 'rejected' },
-  { labelKey: 'shipmentForm.options.bookingStatus.waiting_carrier', value: 'waiting_carrier' },
-];
+const DATE_TIME_FIELDS: ShipmentDateField[] = ['atd', 'ata', 'documentaryCutoff'];
 
-const INSPECTION_STATUSES = [
-  { labelKey: 'shipmentForm.options.inspectionStatus.none', value: 'none' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.documentary', value: 'documentary' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.physical', value: 'physical' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.released', value: 'released' },
-  { labelKey: 'shipmentForm.options.inspectionStatus.automatic', value: 'automatic' },
-];
-type DateField = 'etd' | 'eta' | 'documentaryCutoff';
+const isDateTimeField = (field: ShipmentDateField) => DATE_TIME_FIELDS.includes(field);
 
-const formatDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const formatDateTime = (date: Date) => {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${formatDate(date)} ${hours}:${minutes}`;
-};
-
-const parseDateValue = (value: string) => {
-  if (!value) return null;
-  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const mergeDateAndTime = (datePart: Date, timePart: Date) => {
-  const merged = new Date(datePart);
-  merged.setHours(timePart.getHours(), timePart.getMinutes(), 0, 0);
-  return merged;
-};
+// date helpers: use shared utilities in utils/dateFormatting
 
 export default function CreateShipment() {
   const { t } = useTranslation();
+  const notification = useNativeNotification();
+  const { ownerEmail: ownerEmailParam } = useLocalSearchParams();
+  const { height, isDesktop } = useResponsive();
+  const initialOwnerEmail =
+    typeof ownerEmailParam === 'string' ? ownerEmailParam : Array.isArray(ownerEmailParam) ? ownerEmailParam[0] : '';
 
-  // Un estado por campo para mantener control granular sobre cada input
-  // y facilitar el armado del payload sin transformaciones adicionales.
   const [doNumber, setDoNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [etd, setEtd] = useState('');
   const [eta, setEta] = useState('');
+  const [atd, setAtd] = useState('');
+  const [ata, setAta] = useState('');
   const [documentaryCutoff, setDocumentaryCutoff] = useState('');
   const [incoterm, setIncoterm] = useState('');
   const [cargoType, setCargoType] = useState('');
@@ -116,85 +90,66 @@ export default function CreateShipment() {
   const [containerNumber, setContainerNumber] = useState('');
   const [carrier, setCarrier] = useState('');
   const [observation, setObservation] = useState('');
-  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState(initialOwnerEmail);
 
-  const [activeDateField, setActiveDateField] = useState<DateField | null>(null);
-  const [androidTimeField, setAndroidTimeField] = useState<DateField | null>(null);
+  const [activeDateField, setActiveDateField] = useState<ShipmentDateField | null>(null);
+  const [androidTimeField, setAndroidTimeField] = useState<ShipmentDateField | null>(null);
   const [dateDraft, setDateDraft] = useState(new Date());
 
   // Bloquea el boton de envio mientras la Edge Function procesa la request.
   const [saving, setSaving] = useState(false);
 
-  const resolveOptions = (options: Array<{ labelKey: string; value: string }>) =>
+  const resolveOptions = (options: { labelKey: string; value: string }[]) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
   const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPE_OPTIONS);
   const cargoTypeOptions = resolveOptions(CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
+  const statusOptions = resolveOptions(getShipmentStatusOptions(doNumber));
+  const statusOptionsWithCurrentValue = currentStatus && !statusOptions.some((option) => option.value === currentStatus)
+    ? [...statusOptions, { label: currentStatus, value: currentStatus }]
+    : statusOptions;
+  const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber);
+  const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
 
-  const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
-    try {
-      const text = await response.text();
-      if (text) {
-        try {
-          const payload = JSON.parse(text);
-          if (typeof payload?.error_key === 'string') {
-            return t(payload.error_key, payload.error_params ?? {});
-          }
-          if (typeof payload?.reason_key === 'string') {
-            return t(payload.reason_key, payload.reason_params ?? {});
-          }
-          if (typeof payload?.error === 'string') return payload.error;
-          if (typeof payload?.reason === 'string') return payload.reason;
-        } catch {
-          return text;
-        }
-      }
-    } catch {
-      // ignore response parsing errors
-    }
-    return fallbackMessage;
-  };
+  const resolveErrorMessage = resolveErrorMessageUtil;
 
-  const getDateValue = (field: DateField) => {
+  const getDateValue = (field: ShipmentDateField) => {
     switch (field) {
-      case 'etd':
-        return etd;
-      case 'eta':
-        return eta;
-      case 'documentaryCutoff':
-        return documentaryCutoff;
-      default:
-        return '';
+      case 'etd': return etd;
+      case 'eta': return eta;
+      case 'atd': return atd;
+      case 'ata': return ata;
+      case 'documentaryCutoff': return documentaryCutoff;
+      default: return '';
     }
   };
 
-  const setDateValue = (field: DateField, value: string) => {
+  const setDateValue = (field: ShipmentDateField, value: string) => {
     switch (field) {
-      case 'etd':
-        setEtd(value);
-        break;
-      case 'eta':
-        setEta(value);
-        break;
-      case 'documentaryCutoff':
-        setDocumentaryCutoff(value);
-        break;
-      default:
-        break;
+      case 'etd': setEtd(value); break;
+      case 'eta': setEta(value); break;
+      case 'atd': setAtd(value); break;
+      case 'ata': setAta(value); break;
+      case 'documentaryCutoff': setDocumentaryCutoff(value); break;
     }
   };
 
-  const openDatePicker = (field: DateField) => {
+  const toggleLanguage = async () => {
+    const next = i18n.language === 'es' ? 'en' : 'es';
+    await setAppLanguage(next as 'es' | 'en');
+  };
+
+  const openDatePicker = (field: ShipmentDateField) => {
     const currentValue = getDateValue(field);
-    const parsed = parseDateValue(currentValue);
+    const parsed = parseDateInputValue(currentValue);
     setDateDraft(parsed ?? new Date());
     setActiveDateField(field);
   };
 
-  const applyDateSelection = (field: DateField, date: Date) => {
-    const formatted = field === 'documentaryCutoff' ? formatDateTime(date) : formatDate(date);
+  const applyDateSelection = (field: ShipmentDateField, date: Date) => {
+    const formatted = isDateTimeField(field) ? formatDateTimeInputValue(date) : formatDateInputValue(date);
     setDateValue(field, formatted);
   };
 
@@ -210,12 +165,12 @@ export default function CreateShipment() {
   // Valida campos obligatorios en cliente antes de consumir la Edge Function.
   const handleCreate = async () => {
     if (!doNumber || !origin || !destination) {
-      Alert.alert(t('common.error'), t('createShipment.doRequiredError'));
+      notification.error(t('createShipment.doRequiredError'));
       return;
     }
 
     if (freeDays && Number.isNaN(Number(freeDays))) {
-      Alert.alert(t('common.error'), t('createShipment.freeDaysError'));
+      notification.error(t('createShipment.freeDaysError'));
       return;
     }
 
@@ -226,158 +181,263 @@ export default function CreateShipment() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        Alert.alert(t('common.error'), t('createShipment.noSession'));
+        notification.error(t('createShipment.noSession'));
         return;
       }
-
-      const response = await fetch(
-        createShipmentFunctionUrl,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: supabaseAnonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            do_number: doNumber,
-            shipment_type: shipmentType || null,
-            origin,
-            destination,
-            etd: etd || null,
-            eta: eta || null,
-            documentary_cutoff: documentaryCutoff || null,
-            incoterm: incoterm || null,
-            cargo_type: cargoType || null,
-            free_days: freeDays ? Number(freeDays) : null,
-            booking_status: bookingStatus || null,
-            inspection_status: inspectionStatus || null,
-            current_status: currentStatus || null,
-            current_location: currentLocation || null,
-            exporter: exporter || null,
-            consignee: consignee || null,
-            air_waybill: airWaybill || null,
-            flight_vessel: flightVessel || null,
-            container_number: containerNumber || null,
-            carrier: carrier || null,
-            // Si no se proporciona owner_email, la Edge Function asigna la carga al usuario autenticado.
-            owner_email: ownerEmail || null,
-            observation: observation || null,
-          }),
+      const userId = sessionData.session?.user?.id;
+      console.log(userId);
+      const response = await fetch(createShipmentFunctionUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: supabaseAnonKey,
+          'Content-Type': 'application/json',
         },
-      );
-
+        body: JSON.stringify({
+          do_number: doNumber,
+          shipment_type: shipmentType || null,
+          origin,
+          destination,
+          etd: etd || null,
+          eta: eta || null,
+          atd: atd || null,
+          ata: ata || null,
+          documentary_cutoff: documentaryCutoff || null,
+          incoterm: incoterm || null,
+          cargo_type: cargoType || null,
+          free_days: freeDays ? Number(freeDays) : null,
+          booking_status: bookingStatus || null,
+          inspection_status: inspectionStatus || null,
+          current_status: currentStatus || null,
+          current_location: currentLocation || null,
+          exporter: exporter || null,
+          consignee: consignee || null,
+          air_waybill: airWaybill || null,
+          flight_vessel: flightVessel || null,
+          container_number: containerNumber || null,
+          carrier: carrier || null,
+          // Si no se proporciona owner_email, la Edge Function asigna la carga al usuario autenticado.
+          owner_email: ownerEmail || null,
+          observation: observation || null,
+          created_by: userId,
+        }),
+      });
       if (!response.ok) {
         const errorMessage = await resolveErrorMessage(response, t('createShipment.createError'));
         throw new Error(errorMessage);
       }
 
-      Alert.alert(t('common.success'), t('createShipment.createdOk'));
+      notification.success(t('createShipment.createdOk'));
       // Reemplazar en lugar de push para que el usuario no pueda volver
       // al formulario ya enviado con el boton atras.
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert(t('common.error'), error.message);
+        notification.error(error.message);
       } else {
-        Alert.alert(t('common.error'), t('createShipment.unknownError'));
+        notification.error(t('createShipment.unknownError'));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={StyleSheet.absoluteFill}>
-        <Image
-          source={require('../../visual/background.png')}
-          style={styles.background}
-          resizeMode="cover"
-        />
-      </View>
+  // Estilos responsivos calculados en render para depender de isDesktop
+  const rowStyle = [styles.row, !isDesktop && styles.rowMobile];
+  const fieldStyle = [styles.fieldContainer, !isDesktop && styles.fieldContainerMobile];
 
-      <View style={styles.fixedHeader}>
-        <View style={styles.headerRow}>
-          <LogoCorner inline size={120} />
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {t('createShipment.headerTitle')}
-          </Text>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={backFunction}>
-              <Text style={styles.topActionText}>{t('common.back')}</Text>
+  return (
+    <View style={[styles.container, { minHeight: height }]}>
+      <View style={styles.backgroundBase} />
+      <View style={styles.backgroundGlowOne} />
+      <View style={styles.backgroundGlowTwo} />
+
+      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
+        <View style={[styles.brandBar, isDesktop && styles.brandBarDesktop]}>
+          <View style={[styles.brandWrap, { flex: 1, minWidth: 0, flexShrink: 2 }]}>
+            <LogoCorner inline size={isDesktop ? 148 : 96} />
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={2} style={styles.brandTitle}>
+                {t('dashboard.createShipment')}
+              </Text>
+            </View>
+          </View>
+          {isDesktop ? (
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconAction} onPress={toggleLanguage}>
+                <Ionicons name="globe-outline" size={18} color={COLORS.surface} />
+                <Text style={styles.iconActionText}>ES/EN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconAction} onPress={backFunction}>
+                <Ionicons name="arrow-back-outline" size={18} color={COLORS.surface} />
+                <Text style={styles.iconActionText}>{t('common.back')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+
+        {!isDesktop ? (
+          <View style={styles.headerActionsMobile}>
+            <TouchableOpacity style={styles.iconAction} onPress={toggleLanguage}>
+              <Ionicons name="globe-outline" size={18} color={COLORS.surface} />
+              <Text style={styles.iconActionText}>ES/EN</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconAction} onPress={backFunction}>
+              <Ionicons name="arrow-back-outline" size={18} color={COLORS.surface} />
+              <Text style={styles.iconActionText}>{t('common.back')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        ) : null}
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.form}>
-          {/* Campos marcados con * son obligatorios segun validacion en handleCreate */}
-          <Field label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} placeholder={t('shipmentForm.placeholders.doNumber')} onSubmitEditing={handleCreate} />
-          <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
-          <Field label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} placeholder={t('shipmentForm.placeholders.origin')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} placeholder={t('shipmentForm.placeholders.destination')} onSubmitEditing={handleCreate} />
-          <DateField label={t('shipmentForm.labels.etd')} value={etd} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
-          <DateField label={t('shipmentForm.labels.eta')} value={eta} placeholder={t('shipmentForm.placeholders.date')} onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="date" />
-          <DateField
-            label={t('shipmentForm.labels.documentaryCutoff')}
-            value={documentaryCutoff}
-            placeholder={t('shipmentForm.placeholders.dateTime')}
-            onPress={() => openDatePicker('documentaryCutoff')}
-            onChangeText={setDocumentaryCutoff}
-            mode="datetime"
-          />
-          <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
-          <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
-          <Field
-            label={t('shipmentForm.labels.freeDays')}
-            value={freeDays}
-            onChangeText={setFreeDays}
-            placeholder={t('shipmentForm.placeholders.freeDays')}
-            keyboardType="numeric"
-            onSubmitEditing={handleCreate}
-          />
-          <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
-          <SelectField
-            label={t('shipmentForm.labels.inspectionStatus')}
-            value={inspectionStatus}
-            onValueChange={setInspectionStatus}
-            options={inspectionStatusOptions}
-            placeholder={t('shipmentForm.placeholders.inspectionStatus')}
-          />
-          <Field label={t('shipmentForm.labels.status')} value={currentStatus} onChangeText={setCurrentStatus} placeholder={t('shipmentForm.placeholders.status')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} placeholder={t('shipmentForm.placeholders.location')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.exporter')} value={exporter} onChangeText={setExporter} placeholder={t('shipmentForm.placeholders.exporter')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.consignee')} value={consignee} onChangeText={setConsignee} placeholder={t('shipmentForm.placeholders.consignee')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.awb')} value={airWaybill} onChangeText={setAirWaybill} placeholder={t('shipmentForm.placeholders.awb')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.flight')} value={flightVessel} onChangeText={setFlightVessel} placeholder={t('shipmentForm.placeholders.flight')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.container')} value={containerNumber} onChangeText={setContainerNumber} placeholder={t('shipmentForm.placeholders.container')} onSubmitEditing={handleCreate} />
-          <Field label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} placeholder={t('shipmentForm.placeholders.carrier')} onSubmitEditing={handleCreate} />
-          <Field
-            label={t('shipmentForm.labels.ownerEmail')}
-            value={ownerEmail}
-            onChangeText={setOwnerEmail}
-            placeholder={t('shipmentForm.placeholders.ownerEmail')}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            onSubmitEditing={handleCreate}
-          />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop ? styles.contentDesktop : styles.contentMobile,
+          !isDesktop && styles.contentWithDock,
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.form, styles.shadowCard, !isDesktop && styles.formMobile]}>
+          <FormSection title={t('shipmentForm.sections.shipmentInfo')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.doNumber')} value={doNumber} onChangeText={setDoNumber} placeholder={t('shipmentForm.placeholders.doNumber')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.via')} value={shipmentType} onValueChange={setShipmentType} options={shipmentTypeOptions} placeholder={t('shipmentForm.placeholders.via')} />
+              </View>
+            </View>
 
-          {/* Observacion usa TextInput directo (no Field) por necesitar multiline */}
-          <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder={t('shipmentForm.placeholders.observation')}
-            placeholderTextColor={COLORS.placeholder}
-            value={observation}
-            onChangeText={setObservation}
-            multiline
-            numberOfLines={4}
-          />
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.origin')} value={origin} onChangeText={setOrigin} placeholder={t('shipmentForm.placeholders.origin')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} placeholder={t('shipmentForm.placeholders.destination')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.ownerEmail')} value={ownerEmail} onChangeText={setOwnerEmail} placeholder={t('login.emailPlaceholder')} keyboardType="email-address" autoCapitalize="none" onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.dates')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.etd')} value={etd} placeholder={t('shipmentForm.placeholders.etd')} onPress={() => openDatePicker('etd')} onChangeText={setEtd} mode="date" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.eta')} value={eta} placeholder={t('shipmentForm.placeholders.eta')} onPress={() => openDatePicker('eta')} onChangeText={setEta} mode="datetime" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.documentaryCutoff')} value={documentaryCutoff} placeholder={t('shipmentForm.placeholders.documentaryCutoff')} onPress={() => openDatePicker('documentaryCutoff')} onChangeText={setDocumentaryCutoff} mode="date" />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.atd')} value={atd} placeholder={t('shipmentForm.placeholders.atd')} onPress={() => openDatePicker('atd')} onChangeText={setAtd} mode="datetime" />
+              </View>
+              <View style={fieldStyle}>
+                <DateField label={t('shipmentForm.labels.ata')} value={ata} placeholder={t('shipmentForm.placeholders.ata')} onPress={() => openDatePicker('ata')} onChangeText={setAta} mode="datetime" />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.freeDays')} value={freeDays} onChangeText={setFreeDays} placeholder={t('shipmentForm.placeholders.freeDays')} keyboardType="numeric" onSubmitEditing={handleCreate} />
+              </View>
+            </View>
+          </FormSection>
+          <FormSection title={t('shipmentForm.sections.parties')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.exporter')} value={exporter} onChangeText={setExporter} placeholder={t('shipmentForm.placeholders.exporter')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.consignee')} value={consignee} onChangeText={setConsignee} placeholder={t('shipmentForm.placeholders.consignee')} onSubmitEditing={handleCreate} />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.transport')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.awb')} value={airWaybill} onChangeText={setAirWaybill} placeholder={t('shipmentForm.placeholders.awb')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.flight')} value={flightVessel} onChangeText={setFlightVessel} placeholder={t('shipmentForm.placeholders.flight')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.container')} value={containerNumber} onChangeText={setContainerNumber} placeholder={t('shipmentForm.placeholders.container')} onSubmitEditing={handleCreate} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} placeholder={t('shipmentForm.placeholders.carrier')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+            </View>
+          </FormSection>
+
+          <FormSection title={t('shipmentForm.sections.notes')}>
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.status')} value={currentStatus} onValueChange={setCurrentStatus} options={statusOptionsWithCurrentValue} placeholder={t('shipmentForm.placeholders.status')} helperText={operationTypeHint} />
+              </View>
+              <View style={fieldStyle}>
+                <Field label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} placeholder={t('shipmentForm.placeholders.location')} onSubmitEditing={handleCreate} />
+              </View>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
+              </View>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={fieldStyle}>
+                <SelectField label={t('shipmentForm.labels.inspectionStatus')} value={inspectionStatus} onValueChange={setInspectionStatus} options={inspectionStatusOptions} placeholder={t('shipmentForm.placeholders.inspectionStatus')} />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+              <View style={fieldStyle}>
+                <View />
+              </View>
+            </View>
+            <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder={t('shipmentForm.placeholders.observation')}
+              placeholderTextColor={COLORS.secondaryText}
+              value={observation}
+              onChangeText={setObservation}
+              multiline
+              numberOfLines={4}
+            />
+          </FormSection>
 
           <TouchableOpacity style={styles.button} onPress={handleCreate} disabled={saving}>
-            <Text style={styles.buttonText}>{saving ? t('createShipment.creating') : t('createShipment.submit')}</Text>
+            <Text style={styles.buttonText}>
+              {saving ? t('createShipment.creating') : t('dashboard.createShipment')}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -385,28 +445,20 @@ export default function CreateShipment() {
           <View style={Platform.OS === 'ios' ? styles.datePickerCard : {}}>
             <DateTimePicker
               value={dateDraft}
-              mode={activeDateField === 'documentaryCutoff' && Platform.OS === 'ios' ? 'datetime' : 'date'}
+              mode={isDateTimeField(activeDateField) && Platform.OS === 'ios' ? 'datetime' : 'date'}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={(event, selectedDate) => {
                 if (!activeDateField) return;
-                if (event.type === 'dismissed') {
-                  setActiveDateField(null);
-                  return;
-                }
-
+                if (event.type === 'dismissed') { setActiveDateField(null); return; }
                 const nextDate = selectedDate ?? dateDraft;
-
-                if (Platform.OS === 'android' && activeDateField === 'documentaryCutoff') {
+                if (Platform.OS === 'android' && isDateTimeField(activeDateField)) {
                   setDateDraft(nextDate);
                   setActiveDateField(null);
                   setAndroidTimeField(activeDateField);
                   return;
                 }
-
                 applyDateSelection(activeDateField, nextDate);
-                if (Platform.OS !== 'ios') {
-                  setActiveDateField(null);
-                }
+                if (Platform.OS !== 'ios') setActiveDateField(null);
               }}
             />
             {Platform.OS === 'ios' ? (
@@ -424,15 +476,31 @@ export default function CreateShipment() {
             display="default"
             onChange={(event, selectedDate) => {
               setAndroidTimeField(null);
-              if (event.type === 'dismissed') return;
-              if (!androidTimeField) return;
+              if (event.type === 'dismissed' || !androidTimeField) return;
               const nextDate = selectedDate ?? dateDraft;
-              const merged = mergeDateAndTime(dateDraft, nextDate);
-              applyDateSelection(androidTimeField, merged);
+              applyDateSelection(androidTimeField, mergeDateAndTime(dateDraft, nextDate));
             }}
           />
         ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-componentes
+// ---------------------------------------------------------------------------
+
+type FormSectionProps = {
+  title: string;
+  children: ReactNode;
+};
+
+function FormSection({ title, children }: FormSectionProps) {
+  return (
+    <View style={styles.formSection}>
+      <Text style={styles.formSectionTitle}>{title}</Text>
+      <View>{children}</View>
     </View>
   );
 }
@@ -456,7 +524,7 @@ function Field({ label, value, onChangeText, placeholder, onSubmitEditing, keybo
       <TextInput
         style={styles.input}
         placeholder={placeholder}
-        placeholderTextColor={COLORS.placeholder}
+        placeholderTextColor={COLORS.secondaryText}
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType}
@@ -472,30 +540,32 @@ type SelectFieldProps = {
   label: string;
   value: string;
   onValueChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
+  options: { label: string; value: string }[];
   placeholder: string;
+  helperText?: string;
 };
 
-function SelectField({ label, value, onValueChange, options, placeholder }: SelectFieldProps) {
+function SelectField({ label, value, onValueChange, options, placeholder, helperText }: SelectFieldProps) {
   const isWeb = Platform.OS === 'web';
-  const displayColor = value ? COLORS.blueDark : COLORS.placeholder;
+  const displayColor = value ? COLORS.primaryText : COLORS.secondaryText;
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.pickerWrapper, isWeb ? styles.pickerWrapperWeb : {}]}>
+      <View style={[styles.pickerWrapper, isWeb && styles.pickerWrapperWeb]}>
         <Picker
           selectedValue={value}
           onValueChange={(itemValue) => onValueChange(String(itemValue))}
-          style={[styles.picker, isWeb ? styles.pickerWeb : {}, { color: displayColor }]}
+          style={[styles.picker, isWeb && styles.pickerWeb, { color: displayColor }]}
           itemStyle={isWeb ? styles.pickerItemWeb : {}}
-          dropdownIconColor={COLORS.blueDark}
+          dropdownIconColor={COLORS.primaryText}
         >
-          <Picker.Item label={placeholder} value="" color={COLORS.placeholder} />
+          <Picker.Item label={placeholder} value="" color={COLORS.secondaryText} />
           {options.map((option) => (
             <Picker.Item key={option.value} label={option.label} value={option.value} />
           ))}
         </Picker>
       </View>
+      {helperText ? <Text style={styles.helperText}>{helperText}</Text> : null}
     </>
   );
 }
@@ -516,10 +586,15 @@ const webDateInputStyle: CSSProperties = {
   appearance: 'none',
   MozAppearance: 'textfield',
 };
+
 const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
   if (!value) return '';
-  if (mode === 'date') return value;
-  return value.includes(' ') ? value.replace(' ', 'T') : value;
+  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+  if (mode === 'date') return normalized.length >= 10 ? normalized.slice(0, 10) : normalized;
+  const localDateTime = normalized.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
+  if (localDateTime) return localDateTime;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? normalized : formatDateTimeInputValue(parsed).replace(' ', 'T');
 };
 
 const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {
@@ -530,7 +605,7 @@ const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {
 
 function DateField({ label, value, placeholder, onPress, onChangeText, mode }: DateFieldProps) {
   if (Platform.OS === 'web') {
-    const webInputStyle : CSSProperties = {
+    const webInputStyle: CSSProperties = {
       ...(StyleSheet.flatten(styles.input) as CSSProperties),
     };
     return (
@@ -540,7 +615,7 @@ function DateField({ label, value, placeholder, onPress, onChangeText, mode }: D
           style={{
             ...webInputStyle,
             ...webDateInputStyle,
-            color: value ? COLORS.blueDark : COLORS.placeholder,
+            color: value ? COLORS.primaryText : COLORS.secondaryText,
           }}
           placeholder={placeholder}
           value={toWebDateValue(value, mode)}
@@ -555,83 +630,246 @@ function DateField({ label, value, placeholder, onPress, onChangeText, mode }: D
   }
 
   return (
-    <>
+    <View style={styles.column}>
       <Text style={styles.label}>{label}</Text>
       <TouchableOpacity style={[styles.input, styles.inputPressable]} onPress={onPress} activeOpacity={0.8}>
         <Text style={[styles.dateText, !value && styles.placeholderText]}>{value || placeholder}</Text>
       </TouchableOpacity>
-    </>
+    </View>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Estilos — solo los que se usan en este archivo
+// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  background: { width: '100%', height: '100%' },
-  container: { flex: 1, backgroundColor: 'transparent' },
-  scroll: { flex: 1 },
-  content: { zIndex: 1, paddingBottom: 20, paddingTop: 80 },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 4,
-    justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.orange,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  headerTitle: {
+  // Layout base
+  container: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1B2A3A',
-    textAlign: 'center',
+    backgroundColor: COLORS.backgroundBottom,
+    overflow: 'hidden',
   },
-  topActions: {
+  backgroundBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: COLORS.backgroundBottom,
+  },
+  backgroundGlowOne: {
+    position: 'absolute',
+    top: -120,
+    left: -50,
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: 'rgba(199, 138, 75, 0.18)',
+  },
+  backgroundGlowTwo: {
+    position: 'absolute',
+    top: 40,
+    right: -70,
+    width: 280,
+    height: 280,
+    borderRadius: 999,
+    backgroundColor: 'rgba(79, 104, 142, 0.18)',
+  },
+
+  // Header
+  header: {
+    paddingTop: 26,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    gap: 14,
+    backgroundColor: COLORS.backgroundTop,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+  },
+  headerDesktop: {
+    paddingTop: 28,
+    paddingHorizontal: 28,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  brandBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    minWidth: 60,
+    justifyContent: 'space-between',
+    gap: 16,
+    flexWrap: 'wrap',
   },
-  topActionText: { color: '#1B2A3A', fontSize: 16, fontWeight: '600', padding: 6, includeFontPadding: false },
+  brandBarDesktop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  brandWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  brandTitle: {
+    color: COLORS.white,
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  headerActionsMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  iconAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 241, 234, 0.08)',
+  },
+  iconActionText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Scroll / contenido
+  scroll: { flex: 1 },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 28,
+    gap: 18,
+  },
+  contentDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 28,
+  },
+  contentMobile: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 28,
+  },
+  contentWithDock: {
+    paddingBottom: AUTH_MOBILE_DOCK_PADDING,
+  },
+
+  // Tarjeta del formulario
   form: {
     margin: 16,
-    padding: 20,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+    padding: 18,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.line,
+    gap: 20,
   },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 10, color: COLORS.blueDark },
+  formMobile: {
+    margin: 0,
+    padding: 14,
+    borderRadius: 20,
+  },
+  formSection: {
+    gap: 8,
+  },
+  formSectionTitle: {
+    color: COLORS.primaryText,
+    fontSize: 16,
+    fontWeight: '800',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.line,
+  },
+  shadowCard: {
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+
+  // Filas y campos responsivos
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    gap: 10,
+  },
+  // En mobile las filas se apilan verticalmente
+  rowMobile: {
+    flexDirection: 'column',
+    gap: 0,
+  },
+  fieldContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  // En mobile cada campo ocupa el 100%
+  fieldContainerMobile: {
+    flex: undefined,
+    width: '100%',
+  },
+
+  // Inputs y labels
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 14,
+    marginBottom: 6,
+    marginTop: 10,
+    color: COLORS.secondaryText,
+  },
+  helperText: {
+    fontSize: 12,
+    color: COLORS.blue,
+    marginTop: 6,
+    marginBottom: 2,
+    fontWeight: '600',
+  },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
+    borderColor: COLORS.line,
     padding: 12,
     borderRadius: 8,
     fontSize: 16,
-    backgroundColor: COLORS.cream,
-    color: COLORS.blueDark,
+    backgroundColor: COLORS.surfaceAlt,
+    color: COLORS.primaryText,
     minHeight: 48,
   },
   inputPressable: {
     justifyContent: 'center',
   },
-  dateText: { fontSize: 16, color: COLORS.blueDark },
-  placeholderText: { color: COLORS.placeholder },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  dateText: {
+    fontSize: 16,
+    color: COLORS.primaryText,
+  },
+  placeholderText: {
+    color: COLORS.secondaryText,
+  },
+  // Usado en DateField nativo (no-web) para envolver label + input
+  column: {
+    flexDirection: 'column',
+  },
+
+  // Picker
   pickerWrapper: {
     borderWidth: 1,
-    borderColor: COLORS.blueMid,
+    borderColor: COLORS.line,
     borderRadius: 8,
-    backgroundColor: COLORS.cream,
+    backgroundColor: COLORS.surfaceAlt,
     overflow: 'hidden',
     minHeight: 48,
     justifyContent: 'center',
@@ -641,10 +879,10 @@ const styles = StyleSheet.create({
   },
   picker: {
     width: '100%',
-    color: COLORS.blueDark,
+    color: COLORS.primaryText,
     height: 48,
     fontSize: 16,
-    backgroundColor: COLORS.cream,
+    backgroundColor: COLORS.surfaceAlt,
     borderWidth: 0,
   },
   pickerWeb: {
@@ -655,32 +893,49 @@ const styles = StyleSheet.create({
   pickerItemWeb: {
     fontSize: 16,
   },
-  textArea: { height: 100, textAlignVertical: 'top' },
+
+  // Botón enviar
   button: {
-    backgroundColor: COLORS.blue,
-    padding: 14,
-    borderRadius: 10,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.orangeSoft,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.orangeBorder,
     marginTop: 20,
   },
-  buttonText: { color: COLORS.cream, fontSize: 16, fontWeight: '700' },
+  buttonText: {
+    color: COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Date picker nativo (iOS)
   datePickerCard: {
     marginHorizontal: 16,
     marginTop: 8,
     padding: 12,
-    backgroundColor: COLORS.creamGlass,
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.line,
   },
   dateDoneButton: {
     alignSelf: 'flex-end',
     marginTop: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: COLORS.blue,
+    backgroundColor: COLORS.orangeSoft,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.orangeBorder,
   },
-  dateDoneText: { color: COLORS.cream, fontWeight: '700' },
-
+  dateDoneText: {
+    color: COLORS.primaryText,
+    fontWeight: '700',
+  },
 });

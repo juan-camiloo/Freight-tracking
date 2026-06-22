@@ -8,7 +8,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { supabase } from './supabase';
+import { supabase } from './URLs';
 
 // Datos del dispositivo actuales.
 const isDevice = Device.isDevice;
@@ -101,7 +101,6 @@ async function registerExpoToken(userId: string) {
 
   const projectId = getExpoProjectId();
   if (!projectId) {
-    console.warn('No hay EXPO projectId para registrar push token.');
     return;
   }
 
@@ -125,8 +124,9 @@ async function registerExpoToken(userId: string) {
 
 // Registro de token FCM (web).
 async function registerWebFcmToken(userId: string) {
-  // Flujo web: permiso browser -> service worker -> token FCM -> persistencia en DB.
-  const permission = await Notification.requestPermission();
+  // Flujo web automatico: solo registrar si el permiso ya fue concedido por un gesto previo del usuario.
+  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return;
+  const permission = Notification.permission;
   // Config necesaria para inicializar Firebase en web.
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -140,7 +140,6 @@ async function registerWebFcmToken(userId: string) {
   if (permission !== 'granted') return;
 
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.messagingSenderId || !firebaseConfig.appId || !vapidKey) {
-    console.warn('Faltan variables EXPO_PUBLIC_FIREBASE_* para web push.');
     return;
   }
 
@@ -188,6 +187,21 @@ async function registerWebFcmToken(userId: string) {
   });
 }
 
+export async function requestWebNotificationPermissionAndRegister(userId: string) {
+  if (OS !== 'web' || !userId) return 'unsupported';
+  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported';
+
+  const permission =
+    Notification.permission === 'default'
+      ? await Notification.requestPermission()
+      : Notification.permission;
+
+  if (permission !== 'granted') return permission;
+
+  await registerWebFcmToken(userId);
+  return 'granted';
+}
+
 export async function registerCurrentDevicePushToken(userId: string) {
   // Punto unico invocado por la app tras login/refresh de sesion.
   if (!userId) return;
@@ -200,7 +214,6 @@ export async function registerCurrentDevicePushToken(userId: string) {
 
     await ensureAndroidNotificationChannel();
     await registerExpoToken(userId);
-  } catch (error) {
-    console.error('No se pudo registrar token push:', error);
+  } catch {
   }
 }
