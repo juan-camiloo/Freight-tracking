@@ -1,50 +1,104 @@
-# Welcome to your Expo app 👋
+# 📦 Como Va Mi Carga — Freight Tracking App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Mobile and web freight-tracking application built for **INGELOX S.A.S.**, allowing clients to track their shipments in real time and the internal team to manage them end-to-end: creation, assignment, notifications, and support.
 
-## Get started
+Built with **React Native (Expo)** for iOS/Android/Web, **Supabase** as the backend (Postgres + Edge Functions + RLS), and a custom conversational assistant powered by the **OpenAI API**.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## ✨ Features
 
-2. Start the app
+- **Passwordless authentication** — sign-in via a one-time code sent to email (OTP), through Supabase Auth.
+- **Two role-based views** — internal (operations) dashboard and external (client) dashboard, enforced with Row Level Security (RLS).
+- **Shipment management** — create, edit, and assign shipments (air, maritime, land) with origin, destination, ETA/ETD, and documentary cutoff date.
+- **Push notifications** — via Firebase Cloud Messaging + Expo Notifications, triggered on shipment status changes.
+- **AI-powered conversational assistant** — a custom chatbot (Edge Function + OpenAI `gpt-4.1-mini`) that classifies intents, queries the database in natural language, and automatically creates support tickets or hands off to a human agent.
+- **Support ticket system** — internal support inbox with ticket creation, listing, and updates.
+- **Multi-language** — full UI in Spanish and English (i18next).
+- **Cross-platform** — a single codebase for iOS, Android, and Web (deployed on Netlify).
 
-   ```bash
-   npx expo start
-   ```
+## 🧱 Architecture
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+app/                    → Routes (Expo Router)
+  (auth)/                 protected screens: dashboard, shipments, tickets, chat, profiles
+  auth/                   authentication callback
+  login.tsx               OTP-based login
+components/              Reusable UI components
+lib/                      Supabase client, push notifications, shipment types
+i18n/, locales/           i18n configuration (es/en)
+supabase/functions/       8 Edge Functions (Deno):
+  chatbot/                 AI assistant with intent classification
+  create-shipment/         shipment creation
+  createTicket/            ticket creation
+  invite-user/             invite new internal users
+  list-profiles/           list user profiles
+  list-tickets/            list support tickets
+  notify-shipment-event/   trigger push notifications
+  update-tickets/          update support tickets
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🛠️ Tech Stack
 
-## Learn more
+| Area | Technology |
+|---|---|
+| Frontend | React Native, Expo, Expo Router, TypeScript |
+| Backend | Supabase (PostgreSQL, Edge Functions, RLS) |
+| AI | OpenAI API (`gpt-4.1-mini`) |
+| Notifications | Firebase Cloud Messaging, Expo Notifications |
+| i18n | i18next / react-i18next |
+| Deployment | Netlify (web), EAS (mobile) |
 
-To learn more about developing your project with Expo, look at the following resources:
+## 🚀 Getting Started
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Prerequisites
+- Node.js 18+
+- A [Supabase](https://supabase.com) account and project
+- A [Firebase](https://firebase.google.com) project (for push notifications)
+- An [OpenAI](https://platform.openai.com) API key
 
-## Join the community
+### Installation
 
-Join our community of developers creating universal apps.
+```bash
+git clone https://github.com/juan-camiloo/Freight-tracking.git
+cd Freight-tracking
+npm install
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Environment variables
+
+Create a `lib/supabase.ts` file (excluded from the repository for security reasons) with the following content, replacing the values with your own Supabase project's credentials:
+
+```ts
+import { createClient } from '@supabase/supabase-js'
+
+export const supabaseUrl = 'YOUR_SUPABASE_URL'
+export const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY'
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+```
+
+Also create a `.env` file at the project root with your Firebase credentials:
+
+```
+EXPO_PUBLIC_FIREBASE_API_KEY=
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+EXPO_PUBLIC_FIREBASE_APP_ID=
+EXPO_PUBLIC_FIREBASE_VAPID_KEY=
+```
+
+The Edge Functions (`supabase/functions/`) require their own environment variables set in the Supabase dashboard: `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+### Run the app
+
+```bash
+npx expo start
+```
+
+From there you can open it on Android, iOS (simulator or Expo Go), or Web.
+
+## 📄 License
+
+Built as a professional internship project for INGELOX S.A.S. Internal use / personal portfolio.
