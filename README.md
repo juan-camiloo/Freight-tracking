@@ -6,7 +6,7 @@ Built with **React Native (Expo)** for iOS/Android/Web, **Supabase** as the back
 
 ---
 
-## ✨ Features
+## ✨ Features 
 
 - **Passwordless authentication** — sign-in via a one-time code sent to email (OTP), through Supabase Auth.
 - **Two role-based views** — internal (operations) dashboard and external (client) dashboard, enforced with Row Level Security (RLS).
