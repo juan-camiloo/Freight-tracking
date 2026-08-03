@@ -7,8 +7,10 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": url,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -138,12 +140,6 @@ serve(async (req) => {
       .from("profiles")
       .update({ is_internal: is_internal })
       .eq("id", data.user.id);
-
-    if (updateError) {
-      // Error no critico: el usuario ya fue invitado exitosamente.
-      // El perfil puede corregirse manualmente si es necesario.
-      console.error("Error al actualizar perfil:", updateError);
-    }
 
     return jsonResponse({
       success: true,

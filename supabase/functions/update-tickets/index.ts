@@ -8,8 +8,10 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { Resend } from "npm:resend";
 
+const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": url,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "OPTIONS, POST",
@@ -181,7 +183,7 @@ serve(async (req) => {
                               
                               <div style="background:#f9f9f9; padding:16px; border-radius:8px; margin-bottom:20px; border-left:4px solid #F28A07;">
                                 <p style="margin:0; font-size:14px; color:#1B2A3A;">
-                                  <strong>Detalle:</strong> "${ticket.message}"
+                                  <strong>Detalles:</strong> "${ticket.message}"
                                 </p>
                                 ${ticket.do_number ? `<p style="margin:8px 0 0 0; font-size:14px; color:#1B2A3A;"><strong>DO:</strong> ${ticket.do_number}</p>` : ""}
                                 <p style="margin:8px 0 0 0; font-size:13px; color:#6B7C8F;">Ticket ID: #${ticket.id.slice(0, 8).toUpperCase()}</p>

@@ -6,11 +6,12 @@
 
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
 export const config = { auth: true };
 
+const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": url,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -22,38 +23,11 @@ const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-type Shipment = {
-  do_number: string;
-  shipment_type?: string | null;
-  origin: string;
-  destination: string;
-  etd?: string | null;
-  eta?: string | null;
-  documentary_cutoff?: string | null;
-  incoterm?: string | null;
-  status?: string | null;
-  booking_status?: string | null;
-  inspection_status?: string | null;
-  free_days?: number | string | null;
-  cargo_type?: string | null;
-  current_status?: string | null;
-  current_location?: string | null;
-  exporter?: string | null;
-  consignee?: string | null;
-  air_waybill?: string | null;
-  flight_vessel?: string | null;
-  container_number?: string | null;
-  carrier?: string | null;
-  // Si se provee, la carga se asigna a este usuario en lugar de al creador.
-  owner_email?: string | null;
-  // Primera observacion de tracking que se registra en shipment_updates.
-  observation?: string | null;
-};
-
 serve(async (req) => {
+  console.log('Funcion ejecutada, method:', req.method);
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
-  }
+  } 
 
   try {
     // 1) Verificar que el encabezado Authorization exista y tenga formato Bearer.
@@ -139,7 +113,8 @@ serve(async (req) => {
     // 5) Por defecto la carga se asigna al usuario que la crea.
     // Si se proporciona owner_email, se reasigna al cliente correspondiente,
     // lo que permite a operadores crear cargas en nombre de sus clientes.
-    let ownerId = user.id;
+    const userId = user.id;
+    let ownerId = userId;
 
     if (owner_email) {
       const { data: ownerProfile, error: ownerError } = await supabase
@@ -199,6 +174,8 @@ serve(async (req) => {
         destination: body.destination,
         etd: body.etd ?? null,
         eta: body.eta ?? null,
+        atd: body.atd ?? null,
+        ata: body.ata ?? null,
         documentary_cutoff: body.documentary_cutoff ?? null,
         incoterm: body.incoterm ?? null,
         ...optionalStatus,
@@ -215,6 +192,7 @@ serve(async (req) => {
         container_number: body.container_number ?? null,
         carrier: body.carrier ?? null,
         client_id: ownerId,
+        created_by: userId,
       })
       .select()
       .single();
@@ -254,7 +232,19 @@ serve(async (req) => {
         400,
       );
     }
-
+    const doPrefix = (body.do_number as string)?.[0]?.toLowerCase();
+    const operationType = doPrefix === 'x' ? 'EXPO' : 'IMPO';
+    const folderResponse = await fetch('https://default470219e75ba1443584e0186963d8e1.20.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/aed6f86809f2474fbe02f08db48046b9/triggers/manual/paths/invoke?api-version=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        do_number: body.do_number,
+        type: operationType,
+      }),
+    });
+    console.log('Power Automate response status:', folderResponse.status);
+    const folderBody = await folderResponse.text();
+    console.log('Power Automate response body:', folderBody);
     // 8) Registrar la primera novedad de tracking del ciclo de vida de la carga.
     // Garantiza que siempre haya al menos un evento inicial en el historial.
     const { data: shipmentUpdateData, error: shipmentUpdateError } = await supabase

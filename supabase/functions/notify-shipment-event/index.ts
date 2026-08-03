@@ -8,8 +8,10 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 export const config = { auth: true };
 
+const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": url,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -146,11 +148,13 @@ async function getGoogleAccessToken(serviceAccount: ServiceAccount): Promise<str
 function buildMessage(eventType: EventType, doNumber?: string | null, status?: string | null) {
   // Normaliza el texto de notificacion segun tipo de evento.
   // Si no hay numero de DO disponible, usa un texto generico para no exponer datos vacios.
-  const doLabel = doNumber?.trim() ? doNumber : "tu carga";
+  const doLabel = doNumber?.trim() ? doNumber : null;
+  const messageAssigned = doLabel ? `la carga ${doLabel}` : "una carga"; 
+
   if (eventType === "assigned") {
     return {
       title: "Nueva carga asignada",
-      body: `Se te asigno la carga ${doLabel}.`,
+      body: `Se te asigno ${messageAssigned}.`,
     };
   }
   if (eventType === "updated") {
@@ -161,7 +165,6 @@ function buildMessage(eventType: EventType, doNumber?: string | null, status?: s
         : `La carga ${doLabel} fue actualizada.`,
     };
   }
-  // Caso "deleted".
   return {
     title: "Carga eliminada",
     body: `La carga ${doLabel} fue eliminada.`,
@@ -292,8 +295,8 @@ async function deactivateInvalidTokens(
     .in("token", uniqueTokens);
 
   if (error) {
+    return;
     // Error no critico: el envio ya ocurrio; solo se pierde la limpieza del token.
-    console.error(`No se pudieron desactivar tokens ${platform}:`, error.message);
   }
 }
 

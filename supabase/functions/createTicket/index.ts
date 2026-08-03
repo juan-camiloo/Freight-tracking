@@ -6,8 +6,10 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { Resend } from "npm:resend";
 
+const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": url,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -259,7 +261,6 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }catch (error) {
-    console.error("Error en createTicket:", error);
     return jsonResponse(
       { error: "Error interno del servidor", error_key: "createTicket.internalError" },
       500,
