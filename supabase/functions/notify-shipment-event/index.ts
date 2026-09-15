@@ -8,12 +8,10 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 export const config = { auth: true };
 
-const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
 };
 
 type EventType = "assigned" | "updated" | "deleted";
@@ -392,8 +390,39 @@ serve(async (req) => {
     }
 
     // Si no se especificaron destinatarios explicitamente, se resuelven por
-    // la tabla de relaciones perfil-carga (todos los asignados a ese shipment).
+    // la tabla de relaciones. Consulta AMBAS tablas para ser retrocompatible:
+    // 1) company_shipment (nuevo): busca por empresa y luego expande a miembros del perfil.
+    // 2) profile_shipment (legado): asignaciones directas a usuarios.
     if (targetUserIds.length === 0) {
+      // --- Nueva tabla: por empresa ---
+      const { data: companyRelations } = await supabase
+        .from("company_shipment")
+        .select("company_id")
+        .eq("shipment_id", body.shipment_id);
+
+      if (companyRelations && companyRelations.length > 0) {
+        const companyIds = companyRelations
+          .map((row: { company_id: string | null }) => row.company_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+        if (companyIds.length > 0) {
+          const { data: memberRows } = await supabase
+            .from("profiles")
+            .select("id")
+            .in("company_id", companyIds);
+
+          const memberIds = (memberRows ?? [])
+            .map((row: { id: string }) => row.id)
+            .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+          if (memberIds.length > 0) {
+            targetUserIds = Array.from(new Set([...targetUserIds, ...memberIds]));
+            if (recipientSource === "none") recipientSource = "relations";
+          }
+        }
+      }
+
+      // --- Tabla legada: por perfil (profile_shipment) ---
       const { data: relationRows, error: relationsError } = await supabase
         .from("profile_shipment")
         .select("client_id")
@@ -408,15 +437,13 @@ serve(async (req) => {
       }
 
       const relations = (relationRows ?? []) as ProfileShipmentRelation[];
-      targetUserIds = Array.from(
-        new Set(
-          relations
-            .map((row) => row.client_id)
-            .filter((value): value is string => typeof value === "string" && value.length > 0),
-        ),
-      );
-      if (targetUserIds.length > 0) {
-        recipientSource = "relations";
+      const legacyIds = relations
+        .map((row) => row.client_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+      if (legacyIds.length > 0) {
+        targetUserIds = Array.from(new Set([...targetUserIds, ...legacyIds]));
+        if (recipientSource === "none") recipientSource = "relations";
       }
     }
 

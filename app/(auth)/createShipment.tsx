@@ -5,11 +5,10 @@
 // - Enviar payload a la Edge Function `create-shipment`.
 
 import i18n, { setAppLanguage } from '@/i18n';
-import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Platform,
@@ -21,43 +20,34 @@ import {
   View,
 } from 'react-native';
 import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
-import LogoCorner from '../../components/LogoCorner';
+import Header from '../../components/Header';
+import { COLORS } from '../../components/ui/COLORS';
 import { useNativeNotification } from '../../components/ui/NativeNotification';
 import { useResponsive } from '../../hooks/useResponsive';
-import { BOOKING_STATUSES, CARGO_TYPES, INCOTERMS, INSPECTION_STATUSES, SHIPMENT_TYPE_OPTIONS, getShipmentOperationLabelKey, getShipmentStatusOptions } from '../../lib/shipmentType';
+import {
+  BOOKING_STATUSES,
+  CARGO_TYPES,
+  INCOTERMS,
+  INSPECTION_STATUSES,
+  SHIPMENT_TYPE_OPTIONS,
+  getShipmentOperationLabelKey,
+  getShipmentStatusOptions,
+  inferShipmentOperationType,
+} from '../../lib/shipmentType';
 import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/URLs';
-import { formatDateInputValue, formatDateTimeInputValue, mergeDateAndTime, parseDateInputValue } from '../../utils/dateFormatting';
+import {
+  formatDateInputValue,
+  formatDateTimeInputValue,
+  mergeDateAndTime,
+  parseDateInputValue,
+} from '../../utils/dateFormatting';
 import { resolveErrorMessage as resolveErrorMessageUtil } from '../../utils/errorHandling';
-
-const COLORS = {
-  backgroundTop: '#2A3348',
-  backgroundBottom: '#1D2639',
-  surface: '#f5e3c5',
-  surfaceAlt: '#F9F5EF',
-  surfaceMuted: '#ECE5DB',
-  surfaceSoft: 'rgba(245, 241, 234, 0.94)',
-  primaryText: '#2B3242',
-  secondaryText: '#717887',
-  border: 'rgba(43, 50, 66, 0.12)',
-  line: '#D8D1C7',
-  orange: '#C78A4B',
-  orangeSoft: '#f5bc6c',
-  orangeBorder: '#E8C48D',
-  blue: '#4F688E',
-  blueSoft: '#D9E5F5',
-  white: '#FFFFFF',
-  shadow: 'rgba(16, 24, 40, 0.16)',
-};
-
-// constants moved to lib/shipmentType
 
 type ShipmentDateField = 'etd' | 'eta' | 'atd' | 'ata' | 'documentaryCutoff';
 
 const DATE_TIME_FIELDS: ShipmentDateField[] = ['atd', 'ata', 'documentaryCutoff'];
 
 const isDateTimeField = (field: ShipmentDateField) => DATE_TIME_FIELDS.includes(field);
-
-// date helpers: use shared utilities in utils/dateFormatting
 
 export default function CreateShipment() {
   const { t } = useTranslation();
@@ -81,7 +71,7 @@ export default function CreateShipment() {
   const [freeDays, setFreeDays] = useState('');
   const [bookingStatus, setBookingStatus] = useState('');
   const [inspectionStatus, setInspectionStatus] = useState('');
-  const [currentStatus, setCurrentStatus] = useState('');
+  const [currentStatus, setCurrentStatus] = useState('expo_start_operation');
   const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
   const [consignee, setConsignee] = useState('');
@@ -91,6 +81,35 @@ export default function CreateShipment() {
   const [carrier, setCarrier] = useState('');
   const [observation, setObservation] = useState('');
   const [ownerEmail, setOwnerEmail] = useState(initialOwnerEmail);
+  const [companyId, setCompanyId] = useState('');
+  const [companyOptions, setCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+
+  useEffect(() => {
+    const op = inferShipmentOperationType(doNumber);
+    if (op === 'impo') {
+      if (!currentStatus || currentStatus === 'expo_start_operation') {
+        setCurrentStatus('impo_start_operation');
+      }
+    } else if (op === 'expo') {
+      if (!currentStatus || currentStatus === 'impo_start_operation') {
+        setCurrentStatus('expo_start_operation');
+      }
+    }
+  }, [doNumber]);
+
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const { data } = await supabase.from('companies').select('id, name').order('name', { ascending: true });
+        if (data) {
+          setCompanyOptions(data.map((c) => ({ label: c.name, value: c.id })));
+        }
+      } catch {
+        // no-op
+      }
+    }
+    void loadCompanies();
+  }, []);
 
   const [activeDateField, setActiveDateField] = useState<ShipmentDateField | null>(null);
   const [androidTimeField, setAndroidTimeField] = useState<ShipmentDateField | null>(null);
@@ -112,6 +131,24 @@ export default function CreateShipment() {
     : statusOptions;
   const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber);
   const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
+
+  const carrierLabel =
+    shipmentType === 'maritime'
+      ? t('shipmentForm.labels.carrierMaritime')
+      : shipmentType === 'air'
+        ? t('shipmentForm.labels.carrierAir')
+        : shipmentType === 'land'
+          ? t('shipmentForm.labels.carrierLand')
+          : t('shipmentForm.labels.carrier');
+
+  const carrierPlaceholder =
+    shipmentType === 'maritime'
+      ? t('shipmentForm.placeholders.carrierMaritime')
+      : shipmentType === 'air'
+        ? t('shipmentForm.placeholders.carrierAir')
+        : shipmentType === 'land'
+          ? t('shipmentForm.placeholders.carrierLand')
+          : t('shipmentForm.placeholders.carrier');
 
   const resolveErrorMessage = resolveErrorMessageUtil;
 
@@ -174,6 +211,16 @@ export default function CreateShipment() {
       return;
     }
 
+    if (shipmentType === 'air' && airWaybill && !/^\d{3}-\d{7,8}$/.test(airWaybill.trim())) {
+      notification.error(t('createShipment.awbFormatError'));
+      return;
+    }
+
+    if (shipmentType === 'maritime' && containerNumber && !/^[A-Z]{4}\d{7}$/.test(containerNumber.trim().toUpperCase())) {
+      notification.error(t('createShipment.containerFormatError'));
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -185,7 +232,13 @@ export default function CreateShipment() {
         return;
       }
       const userId = sessionData.session?.user?.id;
-      console.log(userId);
+
+      const cleanString = (val: string | null | undefined): string | null => {
+        if (typeof val !== 'string') return null;
+        const trimmed = val.trim();
+        return trimmed.length > 0 ? trimmed : null;
+      };
+
       const response = await fetch(createShipmentFunctionUrl, {
         method: 'POST',
         headers: {
@@ -194,42 +247,52 @@ export default function CreateShipment() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          do_number: doNumber,
-          shipment_type: shipmentType || null,
-          origin,
-          destination,
+          do_number: cleanString(doNumber) || doNumber,
+          shipment_type: cleanString(shipmentType),
+          origin: cleanString(origin),
+          destination: cleanString(destination),
           etd: etd || null,
           eta: eta || null,
           atd: atd || null,
           ata: ata || null,
           documentary_cutoff: documentaryCutoff || null,
-          incoterm: incoterm || null,
-          cargo_type: cargoType || null,
+          incoterm: cleanString(incoterm),
+          cargo_type: cleanString(cargoType),
           free_days: freeDays ? Number(freeDays) : null,
-          booking_status: bookingStatus || null,
-          inspection_status: inspectionStatus || null,
-          current_status: currentStatus || null,
-          current_location: currentLocation || null,
-          exporter: exporter || null,
-          consignee: consignee || null,
-          air_waybill: airWaybill || null,
-          flight_vessel: flightVessel || null,
-          container_number: containerNumber || null,
-          carrier: carrier || null,
-          // Si no se proporciona owner_email, la Edge Function asigna la carga al usuario autenticado.
-          owner_email: ownerEmail || null,
-          observation: observation || null,
+          booking_status: cleanString(bookingStatus),
+          inspection_status: cleanString(inspectionStatus),
+          current_status: cleanString(currentStatus),
+          current_location: cleanString(currentLocation),
+          exporter: cleanString(exporter),
+          consignee: cleanString(consignee),
+          air_waybill: cleanString(airWaybill),
+          flight_vessel: cleanString(flightVessel),
+          container_number: cleanString(containerNumber),
+          carrier: cleanString(carrier),
+          owner_email: cleanString(ownerEmail),
+          observation: cleanString(observation),
           created_by: userId,
         }),
       });
+
       if (!response.ok) {
         const errorMessage = await resolveErrorMessage(response, t('createShipment.createError'));
         throw new Error(errorMessage);
       }
 
+      const createdJson = await response.json().catch(() => null);
+      if (companyId && createdJson?.id) {
+        try {
+          await supabase.from('company_shipment').upsert(
+            { company_id: companyId, shipment_id: createdJson.id },
+            { onConflict: 'company_id,shipment_id' },
+          );
+        } catch {
+          // no-op
+        }
+      }
+
       notification.success(t('createShipment.createdOk'));
-      // Reemplazar en lugar de push para que el usuario no pueda volver
-      // al formulario ya enviado con el boton atras.
       router.replace('/');
     } catch (error) {
       if (error instanceof Error) {
@@ -242,53 +305,21 @@ export default function CreateShipment() {
     }
   };
 
-  // Estilos responsivos calculados en render para depender de isDesktop
   const rowStyle = [styles.row, !isDesktop && styles.rowMobile];
   const fieldStyle = [styles.fieldContainer, !isDesktop && styles.fieldContainerMobile];
 
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <View style={styles.backgroundBase} />
       <View style={styles.backgroundGlowOne} />
       <View style={styles.backgroundGlowTwo} />
-
-      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
-        <View style={[styles.brandBar, isDesktop && styles.brandBarDesktop]}>
-          <View style={[styles.brandWrap, { flex: 1, minWidth: 0, flexShrink: 2 }]}>
-            <LogoCorner inline size={isDesktop ? 148 : 96} />
-            <View style={{ flex: 1 }}>
-              <Text numberOfLines={2} style={styles.brandTitle}>
-                {t('dashboard.createShipment')}
-              </Text>
-            </View>
-          </View>
-          {isDesktop ? (
-            <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.iconAction} onPress={toggleLanguage}>
-                <Ionicons name="globe-outline" size={18} color={COLORS.surface} />
-                <Text style={styles.iconActionText}>ES/EN</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconAction} onPress={backFunction}>
-                <Ionicons name="arrow-back-outline" size={18} color={COLORS.surface} />
-                <Text style={styles.iconActionText}>{t('common.back')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-
-        {!isDesktop ? (
-          <View style={styles.headerActionsMobile}>
-            <TouchableOpacity style={styles.iconAction} onPress={toggleLanguage}>
-              <Ionicons name="globe-outline" size={18} color={COLORS.surface} />
-              <Text style={styles.iconActionText}>ES/EN</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconAction} onPress={backFunction}>
-              <Ionicons name="arrow-back-outline" size={18} color={COLORS.surface} />
-              <Text style={styles.iconActionText}>{t('common.back')}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
+      <Header
+        isDesktop={isDesktop}
+        title={t('dashboard.createShipment')}
+        showSearch={false}
+        onGoBack={backFunction}
+        onToggleLanguage={toggleLanguage}
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -328,7 +359,13 @@ export default function CreateShipment() {
                 <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
               </View>
               <View style={fieldStyle}>
-                <Field label={t('shipmentForm.labels.ownerEmail')} value={ownerEmail} onChangeText={setOwnerEmail} placeholder={t('login.emailPlaceholder')} keyboardType="email-address" autoCapitalize="none" onSubmitEditing={handleCreate} />
+                <SelectField
+                  label={t('shipmentForm.labels.company')}
+                  value={companyId}
+                  onValueChange={setCompanyId}
+                  options={companyOptions}
+                  placeholder={t('shipmentForm.placeholders.company')}
+                />
               </View>
               <View style={fieldStyle}>
                 <View />
@@ -387,7 +424,7 @@ export default function CreateShipment() {
 
             <View style={rowStyle}>
               <View style={fieldStyle}>
-                <Field label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} placeholder={t('shipmentForm.placeholders.carrier')} onSubmitEditing={handleCreate} />
+                <Field label={carrierLabel} value={carrier} onChangeText={setCarrier} placeholder={carrierPlaceholder} onSubmitEditing={handleCreate} />
               </View>
               <View style={fieldStyle}>
                 <View />
@@ -646,8 +683,8 @@ const styles = StyleSheet.create({
   // Layout base
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   backgroundBase: {
     ...StyleSheet.absoluteFillObject,
@@ -752,7 +789,7 @@ const styles = StyleSheet.create({
   contentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
-    paddingBottom: 28,
+    paddingBottom: 64,
   },
   contentMobile: {
     paddingHorizontal: 12,
@@ -839,7 +876,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.line,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     fontSize: 16,
     backgroundColor: COLORS.surfaceAlt,
     color: COLORS.primaryText,
@@ -868,7 +905,7 @@ const styles = StyleSheet.create({
   pickerWrapper: {
     borderWidth: 1,
     borderColor: COLORS.line,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: COLORS.surfaceAlt,
     overflow: 'hidden',
     minHeight: 48,
@@ -930,7 +967,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: COLORS.orangeSoft,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.orangeBorder,
   },

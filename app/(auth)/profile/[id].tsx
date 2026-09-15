@@ -1,27 +1,28 @@
 // Archivo: app/(auth)/profile/[id].tsx
-// Descripcion: Pantalla de detalle de perfil. Muestra datos basicos y permite navegar a asignacion de carga.
+// Descripcion: Pantalla de detalle de perfil. Muestra datos basicos, empresa asignada
+// y permite gestionar la empresa del usuario y sus cargas.
 
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import {
-    AUTH_COLORS,
-    AUTH_SHADOW,
-    AuthHeader,
-    AuthHeaderAction,
-    AuthScreenBackground,
+  AUTH_COLORS,
+  AUTH_SHADOW,
+  AuthScreenBackground,
 } from '../../../components/auth/AuthChrome';
-import { AUTH_MOBILE_DOCK_PADDING } from '../../../components/auth/AuthNavigation';
-import { ShipmentTransportBadge } from '../../../components/auth/ShipmentTransportIcon';
+import { AUTH_MOBILE_DOCK_PADDING, toggleLanguage } from '../../../components/auth/AuthNavigation';
+import { AuthSearchBar } from '../../../components/auth/AuthSearchBar';
+import Header from '../../../components/Header';
 import { useNativeNotification } from '../../../components/ui/NativeNotification';
 import { useResponsive } from '../../../hooks/useResponsive';
 import { supabase } from '../../../lib/URLs';
@@ -31,20 +32,12 @@ type Profile = {
   email: string;
   is_internal: boolean;
   nickname: string;
+  company_id?: string | null;
 };
 
-type AssignedShipment = {
+type Company = {
   id: string;
-  do_number: string;
-  origin: string;
-  destination: string;
-  shipment_type?: string | null;
-  current_status?: string | null;
-  current_location?: string | null;
-  air_waybill?: string | null;
-  container_number?: string | null;
-  eta?: string | null;
-  created_at?: string | null;
+  name: string;
 };
 
 export default function ProfileDetail() {
@@ -55,9 +48,25 @@ export default function ProfileDetail() {
   const profileId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
 
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [assignedShipments, setAssignedShipments] = useState<AssignedShipment[]>([]);
-  const [shipmentsLoading, setShipmentsLoading] = useState(false);
+  const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Estado para modal de cambio/asignación de empresa
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
+
+  // Estado para eliminar perfil
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [deletingProfile, setDeletingProfile] = useState(false);
+
+  const filteredCompanies = useMemo(() => {
+    const q = companySearchQuery.trim().toLowerCase();
+    if (!q) return allCompanies;
+    return allCompanies.filter((c) => c.name.toLowerCase().includes(q));
+  }, [allCompanies, companySearchQuery]);
 
   useEffect(() => {
     void loadProfileDetails();
@@ -74,6 +83,7 @@ export default function ProfileDetail() {
         router.replace('/login');
         return;
       }
+      setCurrentUserId(user.id);
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -84,10 +94,16 @@ export default function ProfileDetail() {
       if (profileError) throw profileError;
       setProfile(profileData);
 
-      if (!profileData.is_internal && profileId) {
-        await loadAssignedShipments(profileId);
+      // Cargar datos de empresa si el perfil tiene company_id
+      if (profileData.company_id) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('id, name')
+          .eq('id', profileData.company_id)
+          .single();
+        setCompany(companyData ?? null);
       } else {
-        setAssignedShipments([]);
+        setCompany(null);
       }
     } catch {
       notification.error(t('profileDetail.loadError'));
@@ -96,38 +112,84 @@ export default function ProfileDetail() {
     }
   };
 
-  const loadAssignedShipments = async (clientId: string) => {
+  const handleDeleteProfile = async () => {
+    if (!profile) return;
+    if (currentUserId === profile.id) {
+      notification.error(t('profileDetail.cannotDeleteSelf', { defaultValue: 'No puedes eliminar tu propio perfil' }));
+      return;
+    }
+
+    const name = profile.nickname || profile.email || profile.id;
+    const confirmed = await notification.confirm({
+      title: t('profileDetail.deleteTitle', { defaultValue: 'Enviar a papelera' }),
+      message: t('profileDetail.deleteConfirm', {
+        name,
+        defaultValue: `¿Estás seguro de mover el perfil de "${name}" a la papelera del sistema?`,
+      }),
+      confirmLabel: t('common.delete', { defaultValue: 'Mover a papelera' }),
+      cancelLabel: t('common.cancel', { defaultValue: 'Cancelar' }),
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    setDeletingProfile(true);
     try {
-      setShipmentsLoading(true);
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: 'inactive' })
+        .eq('id', profileId);
 
-      const { data: relationData, error: relationError } = await supabase
-        .from('profile_shipment')
-        .select('shipment_id')
-        .eq('client_id', clientId);
+      if (error) throw error;
 
-      if (relationError) throw relationError;
-
-      const shipmentIds = (relationData ?? [])
-        .map((row: { shipment_id: string }) => row.shipment_id)
-        .filter(Boolean);
-
-      if (!shipmentIds.length) {
-        setAssignedShipments([]);
-        return;
-      }
-
-      const { data: shipmentsData, error: shipmentsError } = await supabase
-        .from('shipments')
-        .select('id, do_number, origin, destination, shipment_type, current_status, current_location, air_waybill, container_number, eta, created_at')
-        .in('id', shipmentIds)
-        .order('created_at', { ascending: false });
-
-      if (shipmentsError) throw shipmentsError;
-      setAssignedShipments((shipmentsData as AssignedShipment[]) ?? []);
+      notification.success(t('profileDetail.deleteSuccess', { defaultValue: 'Perfil movido a la papelera' }));
+      router.replace('/profiles' as any);
     } catch {
-      setAssignedShipments([]);
+      notification.error(t('profileDetail.deleteError', { defaultValue: 'No se pudo mover el perfil a la papelera' }));
+      setDeletingProfile(false);
+    }
+  };
+
+  const handleOpenCompanyModal = async () => {
+    setCompanySearchQuery('');
+    setShowCompanyModal(true);
+    setLoadingCompanies(true);
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setAllCompanies(data ?? []);
+    } catch {
+      notification.error(t('companies.loadError'));
     } finally {
-      setShipmentsLoading(false);
+      setLoadingCompanies(false);
+    }
+  };
+
+  const handleSelectCompany = async (targetCompanyId: string | null) => {
+    setSavingCompany(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ company_id: targetCompanyId })
+        .eq('id', profileId);
+
+      if (error) throw error;
+
+      notification.success(
+        targetCompanyId
+          ? t('companies.memberAssigned')
+          : t('companies.memberUnlinked'),
+      );
+
+      setShowCompanyModal(false);
+      void loadProfileDetails();
+    } catch {
+      notification.error(t('companies.updateError'));
+    } finally {
+      setSavingCompany(false);
     }
   };
 
@@ -158,12 +220,14 @@ export default function ProfileDetail() {
   }
 
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <AuthScreenBackground />
-      <AuthHeader
-        title={t('profileDetail.headerTitle')}
+      <Header
         isDesktop={isDesktop}
-        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+        title={t('profileDetail.headerTitle')}
+        showSearch={false}
+        onGoBack={backFunction}
+        onToggleLanguage={toggleLanguage}
       />
 
       <ScrollView
@@ -200,90 +264,162 @@ export default function ProfileDetail() {
             <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
           </View>
 
-          {!profile.is_internal ? (
-            <>
-              <View style={[styles.section, styles.shadowCard]}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{t('profileDetail.sectionShipments')}</Text>
-                  {shipmentsLoading ? <ActivityIndicator size="small" color={AUTH_COLORS.orange} /> : null}
+          {/* Sección de Empresa Asignada con gestión directa */}
+          <View style={[styles.section, styles.shadowCard]}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{t('companies.header')}</Text>
+              <TouchableOpacity style={styles.editCompanyButton} onPress={handleOpenCompanyModal}>
+                <Ionicons name="swap-horizontal-outline" size={15} color={AUTH_COLORS.orange} />
+                <Text style={styles.editCompanyButtonText}>
+                  {company ? t('common.change') : t('companies.assign')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {company ? (
+              <TouchableOpacity
+                style={styles.companyRow}
+                onPress={() => router.push(`/companies/${company.id}` as any)}
+              >
+                <View style={styles.companyBadge}>
+                  <Ionicons name="business-outline" size={20} color={AUTH_COLORS.orange} />
                 </View>
-
-                {assignedShipments.length ? (
-                  <ScrollView
-                    style={styles.assignedShipmentScroll}
-                    contentContainerStyle={styles.assignedShipmentList}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                  >
-                    {assignedShipments.map((shipment) => (
-                      <TouchableOpacity
-                        key={shipment.id}
-                        style={styles.shipmentCard}
-                        onPress={() => router.push(`/shipment/${shipment.id}`)}
-                      >
-                        <ShipmentTransportBadge
-                          shipment={shipment}
-                          shipmentType={shipment.shipment_type}
-                          color={AUTH_COLORS.primaryText}
-                          size={18}
-                          containerStyle={styles.shipmentIcon}
-                        />
-                        <View style={styles.shipmentCopy}>
-                          <Text style={styles.shipmentTitle} numberOfLines={1}>{shipment.do_number}</Text>
-                          <Text style={styles.shipmentRoute} numberOfLines={2}>
-                            {shipment.origin} {'->'} {shipment.destination}
-                          </Text>
-                          {shipment.current_status || shipment.current_location ? (
-                            <Text style={styles.shipmentMeta} numberOfLines={1}>
-                              {[shipment.current_status, shipment.current_location].filter(Boolean).join(' · ')}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <Ionicons name="chevron-forward-outline" size={18} color={AUTH_COLORS.secondaryText} />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <Text style={styles.sectionCopy}>
-                    {shipmentsLoading ? t('profileDetail.shipmentsLoading') : t('profileDetail.shipmentsEmpty')}
+                <View style={styles.companyCopy}>
+                  <Text style={styles.companyLabel}>{t('companies.assignedCompany')}</Text>
+                  <Text style={styles.companyName}>{company.name}</Text>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={16} color={AUTH_COLORS.secondaryText} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.companyRow}>
+                <View style={[styles.companyBadge, { backgroundColor: AUTH_COLORS.surfaceAlt }]}>
+                  <Ionicons name="business-outline" size={20} color={AUTH_COLORS.secondaryText} />
+                </View>
+                <View style={styles.companyCopy}>
+                  <Text style={styles.companyLabel}>{t('companies.assignedCompany')}</Text>
+                  <Text style={[styles.companyName, { color: AUTH_COLORS.secondaryText }]}>
+                    {t('companies.noCompanyAssigned')}
                   </Text>
-                )}
+                </View>
               </View>
-
-              <View style={[styles.section, styles.shadowCard]}>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/assignShipment',
-                      params: { clientId: profileId },
-                    } as any)
-                  }
-                  disabled={!profileId}
-                >
-                  <Ionicons name="link-outline" size={18} color={AUTH_COLORS.primaryText} />
-                  <Text style={styles.primaryButtonText}>{t('dashboard.assignShipment')}</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : null}
+            )}
+          </View>
         </View>
+
+        {currentUserId && currentUserId !== profile.id ? (
+          <View style={styles.dangerZone}>
+            <TouchableOpacity
+              style={styles.deleteProfileButton}
+              onPress={handleDeleteProfile}
+              disabled={deletingProfile}
+            >
+              {deletingProfile ? (
+                <ActivityIndicator size="small" color={AUTH_COLORS.danger} />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={17} color={AUTH_COLORS.danger} />
+                  <Text style={styles.deleteProfileButtonText}>
+                    {t('profileDetail.deleteAction', { defaultValue: 'Mover perfil a la papelera' })}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
+
+      {/* Modal para seleccionar / cambiar empresa del usuario con buscador en tiempo real */}
+      <Modal
+        visible={showCompanyModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCompanyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, isDesktop && styles.modalCardDesktop]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {t('companies.selectCompany')}
+              </Text>
+              <TouchableOpacity onPress={() => setShowCompanyModal(false)}>
+                <Ionicons name="close" size={22} color={AUTH_COLORS.primaryText} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Buscador en tiempo real de empresas */}
+            <AuthSearchBar
+              value={companySearchQuery}
+              onChangeText={setCompanySearchQuery}
+              placeholder={t('companies.searchPlaceholder')}
+              searching={loadingCompanies}
+            />
+
+            {loadingCompanies ? (
+              <View style={styles.modalCenter}>
+                <ActivityIndicator size="small" color={AUTH_COLORS.orange} />
+              </View>
+            ) : filteredCompanies.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Ionicons name="business-outline" size={28} color={AUTH_COLORS.secondaryText} />
+                <Text style={styles.emptyText}>
+                  {companySearchQuery.trim()
+                      ? t('companies.notFound')
+                      : t('companies.empty')}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                {/* Opción de desvincular (solo si no hay filtro de búsqueda activo) */}
+                {company && !companySearchQuery.trim() ? (
+                  <TouchableOpacity
+                    style={[styles.modalCompanyRow, styles.modalUnlinkRow]}
+                    onPress={() => handleSelectCompany(null)}
+                    disabled={savingCompany}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color={AUTH_COLORS.danger} />
+                    <Text style={styles.modalUnlinkText}>
+                      {t('companies.unlinkFromCompany')}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {filteredCompanies.map((c) => {
+                  const isSelected = c.id === company?.id;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.modalCompanyRow, isSelected && styles.modalCompanyRowSelected]}
+                      onPress={() => handleSelectCompany(c.id)}
+                      disabled={savingCompany}
+                    >
+                      <View style={styles.companyBadge}>
+                        <Ionicons name="business-outline" size={18} color={AUTH_COLORS.orange} />
+                      </View>
+                      <Text style={[styles.modalCompanyName, isSelected && styles.modalCompanyNameSelected]}>
+                        {c.name}
+                      </Text>
+                      {isSelected ? (
+                        <Ionicons name="checkmark-circle" size={20} color={AUTH_COLORS.orange} />
+                      ) : (
+                        <Ionicons name="add-circle-outline" size={20} color={AUTH_COLORS.secondaryText} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-type InfoRowProps = {
-  label: string;
-  value: string;
-};
-
-function InfoRow({ label, value }: InfoRowProps) {
-  if (!value) return null;
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoValue}>{value || '---'}</Text>
     </View>
   );
 }
@@ -291,18 +427,17 @@ function InfoRow({ label, value }: InfoRowProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: AUTH_COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   center: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyText: {
-    color: AUTH_COLORS.surface,
-    fontSize: 15,
+  scroll: {
+    flex: 1,
+    minHeight: 0,
   },
-  scroll: { flex: 1 },
   content: {
     gap: 18,
     paddingBottom: 28,
@@ -310,48 +445,57 @@ const styles = StyleSheet.create({
   contentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
+    paddingBottom: 64,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
   },
   contentMobile: {
     paddingHorizontal: 16,
     paddingTop: 18,
   },
+  emptyCard: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   contentWithDock: {
     paddingBottom: AUTH_MOBILE_DOCK_PADDING,
   },
-  shadowCard: AUTH_SHADOW,
   heroCard: {
     backgroundColor: AUTH_COLORS.surface,
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: AUTH_COLORS.line,
-    padding: 22,
+    padding: 24,
     alignItems: 'center',
+    gap: 8,
   },
   heroBadge: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
     backgroundColor: AUTH_COLORS.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 4,
   },
   heroTitle: {
-    color: AUTH_COLORS.primaryText,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '800',
+    color: AUTH_COLORS.primaryText,
     textAlign: 'center',
   },
   heroSubtitle: {
-    color: AUTH_COLORS.secondaryText,
     fontSize: 14,
-    marginTop: 6,
+    color: AUTH_COLORS.secondaryText,
     textAlign: 'center',
   },
   rolePill: {
-    marginTop: 14,
+    marginTop: 4,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 5,
     borderRadius: 999,
   },
   rolePillInternal: {
@@ -378,107 +522,243 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: AUTH_COLORS.line,
-    padding: 18,
+    padding: 20,
     gap: 14,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   sectionTitle: {
     color: AUTH_COLORS.primaryText,
     fontSize: 18,
     fontWeight: '800',
   },
-  sectionHeader: {
+  editCompanyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+  },
+  editCompanyButtonText: {
+    color: AUTH_COLORS.orange,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  companyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  companyBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  companyCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  companyLabel: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  companyName: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: AUTH_COLORS.line,
   },
-  sectionCopy: {
+  infoLabel: {
     color: AUTH_COLORS.secondaryText,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    fontWeight: '600',
   },
-  assignedShipmentScroll: {
-    flexGrow: 0,
-    maxHeight: 340,
+  infoValue: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
   },
   assignedShipmentList: {
     gap: 10,
-    paddingRight: 4,
   },
   shipmentCard: {
-    minHeight: 78,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.line,
-    backgroundColor: AUTH_COLORS.surfaceAlt,
-    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
   },
   shipmentIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    backgroundColor: AUTH_COLORS.blueSoft,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shipmentCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 2,
   },
   shipmentTitle: {
     color: AUTH_COLORS.primaryText,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   shipmentRoute: {
     color: AUTH_COLORS.secondaryText,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
   },
   shipmentMeta: {
     color: AUTH_COLORS.blue,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: AUTH_COLORS.line,
-  },
-  infoLabel: {
-    flex: 1,
+  sectionCopy: {
     color: AUTH_COLORS.secondaryText,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  infoValue: {
-    flex: 1,
-    color: AUTH_COLORS.primaryText,
     fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'right',
   },
   primaryButton: {
-    minHeight: 52,
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    minHeight: 48,
+    borderRadius: 14,
     backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.orangeBorder,
   },
   primaryButtonText: {
     color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  emptyText: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
+  },
+  shadowCard: AUTH_SHADOW,
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 18,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: 480,
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
+    padding: 20,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  modalCardDesktop: {
+    maxWidth: 480,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalCenter: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  modalScroll: {
+    maxHeight: 320,
+  },
+  modalCompanyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    marginBottom: 8,
+  },
+  modalCompanyRowSelected: {
+    borderColor: AUTH_COLORS.orangeBorder,
+    borderWidth: 1,
+  },
+  modalCompanyName: {
+    flex: 1,
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalCompanyNameSelected: {
+    color: AUTH_COLORS.orange,
+  },
+  modalUnlinkRow: {
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
+    borderColor: 'rgba(255, 69, 58, 0.2)',
+    borderWidth: 1,
+    justifyContent: 'center',
+  },
+  modalUnlinkText: {
+    color: AUTH_COLORS.danger,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dangerZone: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  deleteProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  deleteProfileButtonText: {
+    color: AUTH_COLORS.danger,
     fontSize: 14,
     fontWeight: '700',
   },

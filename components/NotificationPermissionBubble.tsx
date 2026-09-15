@@ -61,14 +61,14 @@ export default function NotificationPermissionBubble({
             style={({ pressed }) => [styles.btn, styles.btnNo, pressed && styles.btnPressed]}
             onPress={onDecline}
           >
-            <Text style={styles.btnNoText}>{t('common.no', { defaultValue: 'No' })}</Text>
+            <Text style={styles.btnNoText}>{t('common.no')}</Text>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.btn, styles.btnYes, pressed && styles.btnPressed]}
             onPress={onAccept}
           >
-            <Text style={styles.btnYesText}>{t('common.yes', { defaultValue: 'Sí' })}</Text>
+            <Text style={styles.btnYesText}>{t('common.yes')}</Text>
           </Pressable>
         </View>
       </Animated.View>

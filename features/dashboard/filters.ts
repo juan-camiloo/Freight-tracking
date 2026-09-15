@@ -116,20 +116,26 @@ export function matchesStatusGroup(status: string | null | undefined, filter: St
   const normalizedStatus = normalizeSearchText(status);
   if (filter === 'withoutStatus') return !normalizedStatus;
   if (filter === 'pending') {
-    return ['pending', 'pendiente', 'waiting', 'program', 'reserva', 'book'].some((term) =>
-      normalizedStatus.includes(term),
-    );
+    return [
+      'pending', 'pendiente', 'waiting', 'program', 'reserva', 'book',
+      'start_operation', 'booking_confirmation', 'vehicle', 'documentation', 'filling'
+    ].some((term) => normalizedStatus.includes(term));
   }
   if (filter === 'inTransit') {
-    return ['transit', 'transito', 'on way', 'on_way', 'salida', 'puerto', 'depart', 'ruta'].some((term) =>
-      normalizedStatus.includes(term),
-    );
+    return [
+      'transit', 'transito', 'on way', 'on_way', 'salida', 'puerto', 'depart', 'ruta',
+      'international_transit', 'national_transit', 'departure'
+    ].some((term) => normalizedStatus.includes(term));
   }
   if (filter === 'customs') {
-    return ['aduana', 'custom', 'inspeccion', 'inspection'].some((term) => normalizedStatus.includes(term));
+    return ['aduana', 'custom', 'inspeccion', 'inspection', 'customs'].some((term) =>
+      normalizedStatus.includes(term)
+    );
   }
   if (filter === 'delivered') {
-    return ['entreg', 'deliver', 'cliente', 'arrived', 'arribo'].some((term) => normalizedStatus.includes(term));
+    return [
+      'entreg', 'deliver', 'cliente', 'arrived', 'arribo', 'arrival_confirmation'
+    ].some((term) => normalizedStatus.includes(term));
   }
   return true;
 }
@@ -160,9 +166,9 @@ export function getActiveFilterSummary(filters: ShipmentFilters, t: TFunction) {
     if (from.trim() && to.trim()) {
       summary.push(`${label}: ${from.trim()} - ${to.trim()}`);
     } else if (from.trim()) {
-      summary.push(`${label}: desde ${from.trim()}`);
+      summary.push(`${label}: ${t('dashboard.filters.from')} ${from.trim()}`);
     } else if (to.trim()) {
-      summary.push(`${label}: hasta ${to.trim()}`);
+      summary.push(`${label}: ${t('dashboard.filters.to')} ${to.trim()}`);
     }
   };
   const pushTextFilter = (label: string, value: string) => {
@@ -174,32 +180,33 @@ export function getActiveFilterSummary(filters: ShipmentFilters, t: TFunction) {
   if (filters.statusGroup !== 'all') summary.push(getStatusGroupFilterLabel(filters.statusGroup, t));
   if (filters.milestone !== 'all') summary.push(getMilestoneFilterLabel(filters.milestone, t));
 
-  pushDateRange('Creado', filters.createdFrom, filters.createdTo);
-  pushDateRange('Status', filters.statusFrom, filters.statusTo);
+  pushDateRange(t('dashboard.filters.created'), filters.createdFrom, filters.createdTo);
+  pushDateRange(t('dashboard.filters.status'), filters.statusFrom, filters.statusTo);
   pushDateRange('ETD', filters.etdFrom, filters.etdTo);
   pushDateRange('ATA', filters.ataFrom, filters.ataTo);
   pushDateRange('Cutoff', filters.cutoffFrom, filters.cutoffTo);
 
-  pushTextFilter('Estado', filters.statusText);
-  pushTextFilter('Origen', filters.origin);
-  pushTextFilter('Destino', filters.destination);
-  pushTextFilter('Ubicacion', filters.location);
-  pushTextFilter('Parte', filters.party);
-  pushTextFilter('Carrier', filters.carrier);
-  pushTextFilter('Incoterm', filters.incoterm);
-  pushTextFilter('Carga', filters.cargoType);
-  pushTextFilter('Reserva', filters.bookingStatus);
-  pushTextFilter('Inspeccion', filters.inspectionStatus);
+  pushTextFilter(t('dashboard.filters.statusExact'), filters.statusText);
+  pushTextFilter(t('dashboard.filters.origin'), filters.origin);
+  pushTextFilter(t('dashboard.filters.destination'), filters.destination);
+  pushTextFilter(t('dashboard.filters.location'), filters.location);
+  pushTextFilter(t('dashboard.filters.party'), filters.party);
+  pushTextFilter(t('dashboard.filters.carrier'), filters.carrier);
+  pushTextFilter(t('dashboard.filters.incoterm'), filters.incoterm);
+  pushTextFilter(t('dashboard.filters.cargoType'), filters.cargoType);
+  pushTextFilter(t('dashboard.filters.booking'), filters.bookingStatus);
+  pushTextFilter(t('dashboard.filters.inspection'), filters.inspectionStatus);
 
   if (filters.freeDaysMin.trim() || filters.freeDaysMax.trim()) {
     const min = filters.freeDaysMin.trim();
     const max = filters.freeDaysMax.trim();
+    const freeDaysLabel = t('dashboard.filters.freeDays');
     if (min && max) {
-      summary.push(`Dias libres: ${min} - ${max}`);
+      summary.push(`${freeDaysLabel}: ${min} - ${max}`);
     } else if (min) {
-      summary.push(`Dias libres: min ${min}`);
+      summary.push(`${freeDaysLabel}: ${t('dashboard.filters.min')} ${min}`);
     } else {
-      summary.push(`Dias libres: max ${max}`);
+      summary.push(`${freeDaysLabel}: ${t('dashboard.filters.max')} ${max}`);
     }
   }
 
@@ -207,32 +214,27 @@ export function getActiveFilterSummary(filters: ShipmentFilters, t: TFunction) {
 }
 
 export function getShipmentTypeFilterLabel(value: ShipmentTypeValue, t: TFunction) {
-  const fallbackByType: Record<ShipmentTypeValue, string> = {
-    air: 'Aereo',
-    maritime: 'Maritimo',
-    land: 'Terrestre',
-  };
   const labelKey = getShipmentTypeLabelKey(value);
-  return labelKey ? t(labelKey, { defaultValue: fallbackByType[value] }) : fallbackByType[value];
+  return labelKey ? t(labelKey) : value;
 }
 
 export function getStatusGroupFilterLabel(value: Exclude<StatusGroupFilter, 'all'>, t: TFunction) {
   const labels: Record<Exclude<StatusGroupFilter, 'all'>, string> = {
-    pending: t('dashboard.filters.pending', { defaultValue: 'Pendiente' }),
-    inTransit: t('dashboard.filters.inTransit', { defaultValue: 'En transito' }),
-    customs: t('dashboard.filters.customs', { defaultValue: 'Aduana' }),
-    delivered: t('dashboard.filters.delivered', { defaultValue: 'Entregado' }),
-    withoutStatus: t('dashboard.filters.withoutStatus', { defaultValue: 'Sin estado' }),
+    pending: t('dashboard.filters.pending'),
+    inTransit: t('dashboard.filters.inTransit'),
+    customs: t('dashboard.filters.customs'),
+    delivered: t('dashboard.filters.delivered'),
+    withoutStatus: t('dashboard.filters.withoutStatus'),
   };
   return labels[value];
 }
 
 export function getMilestoneFilterLabel(value: Exclude<MilestoneFilter, 'all'>, t: TFunction) {
   const labels: Record<Exclude<MilestoneFilter, 'all'>, string> = {
-    withoutEta: t('dashboard.filters.withoutEta', { defaultValue: 'Sin ETA' }),
-    withAtd: t('dashboard.filters.withAtd', { defaultValue: 'Con ATD' }),
-    withAta: t('dashboard.filters.withAta', { defaultValue: 'Con ATA' }),
-    overdueEta: t('dashboard.filters.overdueEta', { defaultValue: 'ETA vencida' }),
+    withoutEta: t('dashboard.filters.withoutEta'),
+    withAtd: t('dashboard.filters.withAtd' ),
+    withAta: t('dashboard.filters.withAta' ),
+    overdueEta: t('dashboard.filters.overdueEta' ),
   };
   return labels[value];
 }

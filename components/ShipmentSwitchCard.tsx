@@ -1,7 +1,8 @@
-// features/dashboard/components/ShipmentSwitchCard.tsx
 import { ShipmentTransportBadge } from '@/components/auth/ShipmentTransportIcon';
 import { COLORS } from '@/components/ui/COLORS';
-import type { ShipmentListItem } from '@/lib/shipmentType';
+import { FONT_SIZE, FONT_WEIGHT } from '@/components/ui/TYPOGRAPHY';
+import { getShipmentStatusLabel, type ShipmentListItem } from '@/lib/shipmentType';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function ShipmentSwitchCard({ shipment, selected, desktop = false, onPress }: Props) {
+  const { t } = useTranslation();
   return (
     <TouchableOpacity
       style={[
@@ -20,12 +22,12 @@ export function ShipmentSwitchCard({ shipment, selected, desktop = false, onPres
         selected && styles.cardActive,
       ]}
       onPress={onPress}
+      activeOpacity={0.85}
     >
       <View style={styles.top}>
         <Text
           style={[
             styles.title,
-            desktop && styles.titleDesktop,
             selected && styles.titleActive,
           ]}
           numberOfLines={1}
@@ -37,7 +39,7 @@ export function ShipmentSwitchCard({ shipment, selected, desktop = false, onPres
           shipment={shipment}
           shipmentType={shipment.shipment_type}
           color={selected ? COLORS.primaryText : COLORS.surface}
-          size={18}
+          size={16}
           containerStyle={[
             styles.badge,
             selected && styles.badgeActive,
@@ -48,13 +50,21 @@ export function ShipmentSwitchCard({ shipment, selected, desktop = false, onPres
       <Text
         style={[
           styles.route,
-          desktop && styles.routeDesktop,
           selected && styles.routeActive,
         ]}
-        numberOfLines={2}
+        numberOfLines={1}
       >
         {shipment.origin} → {shipment.destination}
       </Text>
+
+      {/* Status pill visible en la card */}
+      {shipment.current_status ? (
+        <View style={[styles.statusPill, selected && styles.statusPillActive]}>
+          <Text style={[styles.statusPillText, selected && styles.statusPillTextActive]} numberOfLines={1}>
+            {getShipmentStatusLabel(shipment.current_status, t)}
+          </Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -64,6 +74,7 @@ const styles = StyleSheet.create({
     width: 176,
     padding: 14,
     borderRadius: 18,
+    gap: 8,
     backgroundColor: 'rgba(245, 241, 234, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(245, 241, 234, 0.09)',
@@ -80,35 +91,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    marginBottom: 10,
   },
   title: {
     flex: 1,
     color: COLORS.surface,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  titleDesktop: {
-    color: COLORS.surface,
+    fontSize: FONT_SIZE.base,
+    fontWeight: FONT_WEIGHT.bold,
+    lineHeight: 20,
   },
   titleActive: {
     color: COLORS.primaryText,
   },
   route: {
     color: 'rgba(245, 241, 234, 0.7)',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  routeDesktop: {
-    color: 'rgba(245, 241, 234, 0.7)',
+    fontSize: FONT_SIZE.xs,
+    lineHeight: 16,
   },
   routeActive: {
     color: COLORS.secondaryText,
   },
   badge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(245, 241, 234, 0.12)',
@@ -118,5 +123,30 @@ const styles = StyleSheet.create({
   badgeActive: {
     backgroundColor: COLORS.orangeSoft,
     borderColor: COLORS.orangeBorder,
+  },
+  statusPill: {
+    alignSelf: 'flex-start',
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(245, 241, 234, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 241, 234, 0.16)',
+    maxWidth: '100%',
+  },
+  statusPillActive: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.line,
+  },
+  statusPillText: {
+    color: 'rgba(245, 241, 234, 0.75)',
+    fontSize: FONT_SIZE.xs - 1,
+    fontWeight: FONT_WEIGHT.medium,
+    lineHeight: 14,
+  },
+  statusPillTextActive: {
+    color: COLORS.secondaryText,
   },
 });

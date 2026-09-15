@@ -6,8 +6,8 @@ Flujo: paso 1 -> ingresa correo -> paso 2 -> ingresa codigo de 6 digitos
 */
 import Header from '@/components/Header';
 import { useResponsive } from '@/hooks/useResponsive';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   StyleSheet,
@@ -29,12 +29,21 @@ export default function Login() {
   const { t } = useTranslation();
   const notification = useNativeNotification();
   const { height, isDesktop } = useResponsive();
+  const { reason } = useLocalSearchParams<{ reason?: string }>();
 
   const [cooldown, setCooldown] = useState(0)
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (reason === 'account_inactive') {
+      notification.error(t('login.accountInactive', { defaultValue: 'Tu cuenta se encuentra inactiva. Comunícate con el administrador.' }));
+    } else if (reason === 'company_inactive') {
+      notification.error(t('login.companyInactive', { defaultValue: 'La empresa asociada a tu cuenta se encuentra inactiva. Comunícate con el administrador.' }));
+    }
+  }, [reason]);
 
   const handleSendCode = async () => {
     if (cooldown > 0) return; 
@@ -72,9 +81,41 @@ export default function Login() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (session) {
+      if (session?.user?.id) {
+        // Validar que el perfil o su empresa no se encuentren inactivos
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('id, status, is_internal, company_id')
+          .eq('id', session.user.id)
+          .single();
+
+        let isInactive = userProfile?.status === 'inactive';
+        let inactiveReason = 'account';
+
+        if (!isInactive && userProfile?.company_id) {
+          const { data: comp } = await supabase
+            .from('companies')
+            .select('status')
+            .eq('id', userProfile.company_id)
+            .single();
+          if (comp?.status === 'inactive') {
+            isInactive = true;
+            inactiveReason = 'company';
+          }
+        }
+
+        if (isInactive) {
+          await supabase.auth.signOut();
+          notification.error(
+            inactiveReason === 'company'
+              ? t('login.companyInactive', { defaultValue: 'La empresa asociada a tu cuenta se encuentra inactiva. Comunícate con el administrador.' })
+              : t('login.accountInactive', { defaultValue: 'Tu cuenta se encuentra inactiva. Comunícate con el administrador.' })
+          );
+          return;
+        }
+
         notification.success(t('login.success'));
-        router.replace('/newsMobile');
+        router.replace('/');
       }
     }
     if (error) {

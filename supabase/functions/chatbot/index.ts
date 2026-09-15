@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std/http/server.ts";
+import { serve } from "https://deno.land/std/http/server.ts";
 import OpenAI from "https://esm.sh/openai";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import intentsData from "./intents.json" with { type: "json" };
@@ -16,13 +16,11 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
-const url = "https://como-va-mi-carga.ingelox.com.co" && "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-}
+};
 
 const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(payload), {

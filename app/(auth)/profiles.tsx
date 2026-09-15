@@ -1,5 +1,5 @@
 // Archivo: app/(auth)/profiles.tsx
-// Descripcion: Pantalla de perfiles para usuarios internos. Permite cargar, buscar y abrir el detalle de cada perfil.
+// Descripcion: Pantalla de perfiles para usuarios internos. Permite cargar, buscar y ver la empresa de cada usuario.
 
 import Header from '@/components/Header';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,23 +12,26 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import {
   AUTH_COLORS,
   AUTH_SHADOW,
-  AuthScreenBackground
+  AuthScreenBackground,
 } from '../../components/auth/AuthChrome';
 import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
 import { AuthSearchBar } from '../../components/auth/AuthSearchBar';
 import { useNativeNotification } from '../../components/ui/NativeNotification';
 import { useResponsive } from '../../hooks/useResponsive';
 import { listProfilesFunctionUrl, supabase, supabaseAnonKey } from '../../lib/URLs';
+
 type Profile = {
   id: string;
   email: string | null;
   is_internal: boolean;
   nickname?: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
 };
 
 const isAbortError = (error: unknown) =>
@@ -112,22 +115,36 @@ export default function Profiles() {
         return;
       }
 
-      const response = await fetch(listProfilesFunctionUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: supabaseAnonKey,
-          'Content-Type': 'application/json',
-        },
-      });
+      const [profilesRes, companiesRes] = await Promise.all([
+        fetch(listProfilesFunctionUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            apikey: supabaseAnonKey,
+            'Content-Type': 'application/json',
+          },
+        }),
+        supabase.from('companies').select('id, name'),
+      ]);
 
-      if (!response.ok) {
-        const errorMessage = await resolveErrorMessage(response, t('profiles.loadError'));
+      if (!profilesRes.ok) {
+        const errorMessage = await resolveErrorMessage(profilesRes, t('profiles.loadError'));
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      setProfiles(data || []);
+      const rawProfiles = await profilesRes.json();
+      const companyMap = new Map<string, string>(
+        (companiesRes.data ?? []).map((c: { id: string; name: string }) => [c.id, c.name]),
+      );
+
+      const enhancedProfiles: Profile[] = (rawProfiles || [])
+        .filter((p: any) => p.status !== 'inactive')
+        .map((p: any) => ({
+          ...p,
+          company_name: p.company_id ? companyMap.get(p.company_id) ?? null : null,
+        }));
+
+      setProfiles(enhancedProfiles);
     } catch (error) {
       if (isAbortError(error)) return;
       notification.error(error instanceof Error ? error.message : t('profiles.unknownError'));
@@ -142,7 +159,8 @@ export default function Profiles() {
     const next = profiles.filter((item) => {
       const nickname = item.nickname?.toLowerCase() ?? '';
       const email = item.email?.toLowerCase() ?? '';
-      return nickname.includes(clean) || email.includes(clean);
+      const companyName = item.company_name?.toLowerCase() ?? '';
+      return nickname.includes(clean) || email.includes(clean) || companyName.includes(clean);
     });
 
     setSearchResults(next);
@@ -168,12 +186,12 @@ export default function Profiles() {
   const listData = searchQuery.trim().length > 0 ? searchResults : profiles;
 
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <AuthScreenBackground />
       <Header
         title={t('profiles.headerTitle')}
         isDesktop={isDesktop}
-        showSearch = {false}
+        showSearch={false}
         onGoBack={backFunction}
       />
 
@@ -189,29 +207,6 @@ export default function Profiles() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.headerStack}>
-            <View style={[styles.actionCard, styles.shadowCard]}>
-              <View style={styles.actionCardCopy}>
-                <Text style={styles.actionCardTitle}>{t('dashboard.quickActions')}</Text>
-                <Text style={styles.actionCardText}>{t('profiles.actionsSubtitle')}</Text>
-              </View>
-              <View style={styles.actionCardActions}>
-                <TouchableOpacity
-                  style={styles.actionCardButton}
-                  onPress={() => router.push('/assignShipment' as any)}
-                >
-                  <Ionicons name="link-outline" size={18} color={AUTH_COLORS.primaryText} />
-                  <Text style={styles.actionCardButtonText}>{t('dashboard.assignShipment')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionCardButton}
-                  onPress={() => router.push('/addUser')}
-                >
-                  <Ionicons name="person-add-outline" size={18} color={AUTH_COLORS.primaryText} />
-                  <Text style={styles.actionCardButtonText}>{t('dashboard.addUser')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             <View style={[styles.searchCard, styles.shadowCard]}>
               <AuthSearchBar
                 value={searchQuery}
@@ -232,10 +227,11 @@ export default function Profiles() {
           </View>
         }
         renderItem={({ item }) => {
-          const label =
+          const nickname =
             (item.nickname && item.nickname.trim()) ||
             (item.email && item.email.trim()) ||
             t('profiles.unnamedProfile');
+          const companyDisplay = item.company_name || (item.is_internal ? t('profiles.internalTeam', { defaultValue: 'Equipo interno' }) : t('companies.noCompanyAssigned'));
 
           return (
             <TouchableOpacity
@@ -248,18 +244,30 @@ export default function Profiles() {
               }
             >
               <View style={styles.cardTop}>
-                <View style={styles.avatarBadge}>
+                <View style={styles.userIconBadge}>
                   <Ionicons name="person-outline" size={18} color={AUTH_COLORS.blue} />
                 </View>
                 <View style={styles.cardCopy}>
-                  <Text style={styles.cardProfile}>{label}</Text>
+                  <Text style={styles.cardProfile}>{nickname}</Text>
+                  {item.company_name ? (
+                    <View style={styles.companyPill}>
+                      <Ionicons name="business-outline" size={12} color={AUTH_COLORS.orange} />
+                      <Text style={styles.companyPillText} numberOfLines={1}>
+                        {item.company_name}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.noCompanyPill}>
+                      <Ionicons name="business-outline" size={12} color={AUTH_COLORS.secondaryText} />
+                      <Text style={styles.noCompanyPillText}>
+                        {companyDisplay}
+                      </Text>
+                    </View>
+                  )}
                   {item.email ? <Text style={styles.cardSub}>{item.email}</Text> : null}
                 </View>
-                <View style={[styles.rolePill, item.is_internal ? styles.rolePillInternal : styles.rolePillExternal]}>
-                  <Text style={[styles.rolePillText, item.is_internal ? styles.rolePillTextInternal : styles.rolePillTextExternal]}>
-                    {item.is_internal ? t('profiles.internalRole') : t('profiles.externalRole')}
-                  </Text>
-                </View>
+
+                <Ionicons name="chevron-forward" size={18} color={AUTH_COLORS.secondaryText} />
               </View>
             </TouchableOpacity>
           );
@@ -273,6 +281,15 @@ export default function Profiles() {
           </View>
         }
       />
+
+      <TouchableOpacity
+        style={[styles.addUserFab, !isDesktop && styles.addUserFabMobile]}
+        onPress={() => router.push('/addUser')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="person-add-outline" size={20} color="#ffffff" />
+        <Text style={styles.addUserFabText}>{t('dashboard.addUser')}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -280,8 +297,8 @@ export default function Profiles() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: AUTH_COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   center: {
     justifyContent: 'center',
@@ -289,6 +306,7 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+    minHeight: 0,
   },
   listContent: {
     gap: 14,
@@ -297,6 +315,10 @@ const styles = StyleSheet.create({
   listContentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
+    paddingBottom: 64,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
   },
   listContentMobile: {
     paddingHorizontal: 16,
@@ -309,44 +331,32 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 2,
   },
-  actionCard: {
-    backgroundColor: AUTH_COLORS.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.line,
-    padding: 16,
-    gap: 12,
-  },
-  actionCardCopy: {
-    gap: 4,
-  },
-  actionCardTitle: {
-    color: AUTH_COLORS.primaryText,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  actionCardText: {
-    color: AUTH_COLORS.secondaryText,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  actionCardActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  actionCardButton: {
-    alignSelf: 'flex-start',
-    minHeight: 44,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: AUTH_COLORS.orangeSoft,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.orangeBorder,
+  addUserFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
+    backgroundColor: AUTH_COLORS.orange,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 99,
+  },
+  addUserFabMobile: {
+    bottom: AUTH_MOBILE_DOCK_PADDING + 16,
+    right: 16,
+  },
+  addUserFabText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   actionCardButtonText: {
     color: AUTH_COLORS.primaryText,
@@ -373,7 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  avatarBadge: {
+  userIconBadge: {
     width: 42,
     height: 42,
     borderRadius: 14,
@@ -384,17 +394,54 @@ const styles = StyleSheet.create({
   cardCopy: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
   },
   cardProfile: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: AUTH_COLORS.primaryText,
   },
   cardSub: {
-    marginTop: 4,
     color: AUTH_COLORS.secondaryText,
     fontSize: 13,
   },
+
+  companyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  companyPillText: {
+    color: AUTH_COLORS.orangeText,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  noCompanyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  noCompanyPillText: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 11,
+  },
+
   rolePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -407,7 +454,7 @@ const styles = StyleSheet.create({
     backgroundColor: AUTH_COLORS.blueSoft,
   },
   rolePillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   rolePillTextInternal: {
@@ -417,20 +464,18 @@ const styles = StyleSheet.create({
     color: AUTH_COLORS.blue,
   },
   emptyState: {
-    marginTop: 10,
-    paddingVertical: 34,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+    marginTop: 18,
     backgroundColor: AUTH_COLORS.surface,
-    alignItems: 'center',
-    gap: 10,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: AUTH_COLORS.line,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
   },
   emptyTitle: {
-    color: AUTH_COLORS.primaryText,
-    fontSize: 18,
-    fontWeight: '800',
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 14,
     textAlign: 'center',
   },
 });

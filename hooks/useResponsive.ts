@@ -1,7 +1,7 @@
 
 import { useWindowDimensions } from 'react-native';
 
-const DESKTOP_BREAKPOINT = 980;
+const DESKTOP_BREAKPOINT = 1140;
 
 export function useResponsive(breakpoint = DESKTOP_BREAKPOINT) {
   const { width, height } = useWindowDimensions();

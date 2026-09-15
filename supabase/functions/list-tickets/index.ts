@@ -7,10 +7,8 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "OPTIONS, POST, GET",
@@ -66,16 +64,18 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
 
-    if (profileError || !profile?.is_internal) {
+    if (profileError) {
       return jsonResponse(
         {
-          error: "El perfil no es interno",
-          error_key: "listTickets.notInternal",
+          error: "No se encontró el perfil del usuario",
+          error_key: "listTickets.profileNotFound",
           details: profileError?.message,
         },
-        403,
+        404,
       );
     }
+
+    const isInternal = Boolean(profile?.is_internal);
 
     const payload = req.method === "GET" ? {} : await req.json().catch(() => ({}));
     const ticketId =
@@ -87,7 +87,11 @@ serve(async (req) => {
       .from("tickets")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
+
+    if (!isInternal) {
+      ticketsQuery = ticketsQuery.eq("user_id", user.id);
+    }
 
     if (ticketId) {
       ticketsQuery = ticketsQuery.eq("id", ticketId);
@@ -108,7 +112,11 @@ serve(async (req) => {
 
     const rows = tickets ?? [];
     const userIds = Array.from(
-      new Set(rows.map((ticket) => ticket.user_id).filter(Boolean)),
+      new Set(
+        rows
+          .flatMap((ticket) => [ticket.user_id, ticket.resolved_by])
+          .filter(Boolean),
+      ),
     );
 
     let profileMap = new Map<string, { email: string | null; nickname: string | null }>();
@@ -142,10 +150,12 @@ serve(async (req) => {
 
     const enriched = rows.map((ticket) => {
       const profile = ticket.user_id ? profileMap.get(ticket.user_id) : undefined;
+      const resolver = ticket.resolved_by ? profileMap.get(ticket.resolved_by) : undefined;
       return {
         ...ticket,
         user_email: profile?.email ?? null,
         user_nickname: profile?.nickname ?? null,
+        resolved_by_name: resolver?.nickname || resolver?.email || null,
       };
     });
 

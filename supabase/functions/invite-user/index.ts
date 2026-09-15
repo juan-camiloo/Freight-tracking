@@ -7,13 +7,11 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
 const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
@@ -74,7 +72,7 @@ serve(async (req) => {
       );
     }
     // 3) Extraer datos de la invitacion enviados por el frontend.
-    const { email, is_internal, nickname } = body;
+    const { email, is_internal, nickname, company_id } = body;
 
     if (!email) {
       return jsonResponse(
@@ -133,12 +131,14 @@ serve(async (req) => {
     // donde el perfil aun no existe al momento del UPDATE.
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // 8) Establecer si el nuevo usuario es interno o externo.
-    // El trigger crea el perfil con valores por defecto, asi que este UPDATE
-    // es el que aplica la configuracion real segun el rol asignado en la invitacion.
+    // 8) Establecer rol, nickname y empresa asignada en el perfil recién creado.
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ is_internal: is_internal })
+      .update({
+        is_internal: is_internal,
+        nickname: nickname || null,
+        company_id: company_id || null,
+      })
       .eq("id", data.user.id);
 
     return jsonResponse({

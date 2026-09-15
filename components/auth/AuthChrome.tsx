@@ -6,33 +6,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { COLORS } from '../ui/COLORS';
 
-export const AUTH_COLORS = {
-  backgroundTop: '#2A3348',
-  backgroundBottom: '#1D2639',
-  surface: '#f5e3c5',
-  surfaceAlt: '#F9F5EF',
-  surfaceMuted: '#ECE5DB',
-  surfaceSoft: 'rgba(245, 241, 234, 0.94)',
-  primaryText: '#2B3242',
-  secondaryText: '#717887',
-  border: 'rgba(43, 50, 66, 0.12)',
-  line: '#D8D1C7',
-  orange: '#C78A4B',
-  orangeSoft: '#f5bc6c',
-  orangeBorder: '#E8C48D',
-  green: '#56715B',
-  greenSoft: '#DCE8DE',
-  blue: '#4F688E',
-  blueSoft: '#D9E5F5',
-  white: '#FFFFFF',
-  danger: '#A1474F',
-  dangerSoft: '#F5D9DB',
-  shadow: 'rgba(16, 24, 40, 0.16)',
-} as const;
+export const AUTH_COLORS = COLORS;
 
 export const AUTH_SHADOW = {
-  shadowColor: AUTH_COLORS.shadow,
+  shadowColor: COLORS.shadow,
   shadowOffset: { width: 0, height: 10 },
   shadowOpacity: 1,
   shadowRadius: 22,
@@ -53,6 +32,20 @@ type AuthHeaderActionProps = {
   disabled?: boolean;
   variant?: 'subtle' | 'accent' | 'danger';
 };
+
+export function AuthHeader({ title, actions, isDesktop, navigation }: AuthHeaderProps) {
+  return (
+    <View style={[styles.headerWrap, isDesktop && styles.headerWrapDesktop]}>
+      <View style={styles.headerTitleArea}>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
+      {navigation ? <View style={styles.headerNavArea}>{navigation}</View> : null}
+      {actions ? <View style={styles.headerActionsArea}>{actions}</View> : null}
+    </View>
+  );
+}
 
 export function AuthScreenBackground() {
   return (
@@ -165,5 +158,40 @@ const styles = StyleSheet.create({
   },
   headerActionTextDanger: {
     color: AUTH_COLORS.dangerSoft,
+  },
+  headerWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  headerWrapDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  headerTitleArea: {
+    flex: 1,
+  },
+  headerTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  headerDesktopNavArea: {
+    paddingHorizontal: 12,
+  },
+  headerNavArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionsArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

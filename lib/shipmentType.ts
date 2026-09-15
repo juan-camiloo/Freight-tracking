@@ -171,6 +171,39 @@ export const STATUS_OPTIONS_BY_OPERATION: Record<ShipmentOperationType, Shipment
 
 export const STATUSES = STATUS_OPTIONS_BY_OPERATION.expo;
 
+export const SHIPMENT_STATUS_LABEL_KEYS: Record<string, string> = {
+  // Exportación
+  expo_start_operation: 'shipmentForm.options.status.expo.startOperation',
+  expo_booking_confirmation: 'shipmentForm.options.status.expo.bookingConfirmation',
+  expo_vehicle: 'shipmentForm.options.status.expo.vehicle',
+  expo_documentation: 'shipmentForm.options.status.expo.documentation',
+  expo_departure: 'shipmentForm.options.status.expo.departure',
+  expo_international_transit: 'shipmentForm.options.status.expo.internationalTransit',
+  expo_arrival_confirmation: 'shipmentForm.options.status.expo.arrivalConfirmation',
+  // Importación
+  impo_start_operation: 'shipmentForm.options.status.impo.startOperation',
+  impo_filling: 'shipmentForm.options.status.impo.filling',
+  impo_documentation: 'shipmentForm.options.status.impo.documentation',
+  impo_departure: 'shipmentForm.options.status.impo.departure',
+  impo_international_transit: 'shipmentForm.options.status.impo.internationalTransit',
+  impo_customs: 'shipmentForm.options.status.impo.customs',
+  impo_arrival_confirmation: 'shipmentForm.options.status.impo.arrivalConfirmation',
+  impo_national_transit: 'shipmentForm.options.status.impo.nationalTransit',
+  // Compatibilidad con estados legacy si existieran en registros anteriores
+  on_way: 'shipmentForm.options.status.onWay',
+  waiting_inspection: 'shipmentForm.options.status.waitingInspection',
+  arrived: 'shipmentForm.options.status.arrived',
+};
+
+export function getShipmentStatusLabel(
+  status: string | null | undefined,
+  t: (key: string, options?: any) => string
+): string {
+  if (!status) return t('dashboard.pendingLabel');
+  const key = SHIPMENT_STATUS_LABEL_KEYS[status];
+  return key ? t(key) : status;
+}
+
 export const inferShipmentOperationType = (doNumber?: string | null): ShipmentOperationType | null => {
   const normalizedDo = doNumber?.trim().toUpperCase();
   if (normalizedDo?.startsWith('X')) return 'expo';
@@ -194,6 +227,13 @@ export const CARGO_TYPES = [
   { labelKey: 'shipmentForm.options.cargoType.perishable', value: 'perishable' },
   { labelKey: 'shipmentForm.options.cargoType.refrigerated', value: 'refrigerated' },
   { labelKey: 'shipmentForm.options.cargoType.chemicals', value: 'chemicals' },
+  { labelKey: 'shipmentForm.options.cargoType.dry_bulk', value: 'dry_bulk' },
+  { labelKey: 'shipmentForm.options.cargoType.liquid_bulk', value: 'liquid_bulk' },
+  { labelKey: 'shipmentForm.options.cargoType.project_cargo', value: 'project_cargo' },
+  { labelKey: 'shipmentForm.options.cargoType.valuable', value: 'valuable' },
+  { labelKey: 'shipmentForm.options.cargoType.pharma', value: 'pharma' },
+  { labelKey: 'shipmentForm.options.cargoType.roro', value: 'roro' },
+  { labelKey: 'shipmentForm.options.cargoType.live_animals', value: 'live_animals' },
 ];
 
 export const BOOKING_STATUSES = [
@@ -237,4 +277,30 @@ export const inferShipmentType = (hints: ShipmentTypeHints = {}): ShipmentTypeVa
 export const getShipmentTypeLabelKey = (value?: string | null) => {
   const normalizedValue = normalizeShipmentType(value);
   return normalizedValue ? `shipmentForm.options.shipmentType.${normalizedValue}` : null;
+};
+
+// Subtipos de carga por modalidad de transporte
+export type CargoSubtype =
+  | 'fcl' | 'lcl' | 'bulk' | 'roro_maritime' | 'tanker'  // marítimos
+  | 'general_air' | 'express' | 'charter'                  // aéreos
+  | 'ftl' | 'ltl' | 'multimodal';                         // terrestres
+
+export const CARGO_SUBTYPES_BY_TRANSPORT: Record<'air' | 'maritime' | 'land', { labelKey: string; value: string }[]> = {
+  maritime: [
+    { labelKey: 'shipmentForm.options.cargoSubtype.fcl', value: 'fcl' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.lcl', value: 'lcl' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.bulk', value: 'bulk' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.roro_maritime', value: 'roro_maritime' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.tanker', value: 'tanker' },
+  ],
+  air: [
+    { labelKey: 'shipmentForm.options.cargoSubtype.general_air', value: 'general_air' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.express', value: 'express' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.charter', value: 'charter' },
+  ],
+  land: [
+    { labelKey: 'shipmentForm.options.cargoSubtype.ftl', value: 'ftl' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.ltl', value: 'ltl' },
+    { labelKey: 'shipmentForm.options.cargoSubtype.multimodal', value: 'multimodal' },
+  ],
 };

@@ -4,11 +4,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -28,7 +30,7 @@ import { useNativeNotification } from '../../../components/ui/NativeNotification
 import { useDashboardShipments } from '../../../hooks/useDashboardShipments';
 import { useResponsive } from '../../../hooks/useResponsive';
 import { notifyShipmentEvent } from '../../../lib/shipmentNotifications';
-import { BOOKING_STATUSES, CARGO_TYPES, getShipmentOperationLabelKey, getShipmentStatusOptions, INCOTERMS, INSPECTION_STATUSES, normalizeShipmentType, SHIPMENT_TYPE_OPTIONS } from '../../../lib/shipmentType';
+import * as types from '../../../lib/shipmentType';
 import { supabase } from '../../../lib/URLs';
 import { formatDateInputValue, formatDateTimeInputValue, mergeDateAndTime, parseDateInputValue } from '../../../utils/dateFormatting';
 
@@ -71,6 +73,12 @@ export default function EditShipment() {
   const [observation, setObservation] = useState('');
   const [clientId, setClientId] = useState('');
 
+  // Estado para gestión de documentos
+  const [documents, setDocuments] = useState<types.DocumentRecord[]>([]);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
   const [activeDateField, setActiveDateField] = useState<DateFieldName | null>(null);
   const [androidTimeField, setAndroidTimeField] = useState<DateFieldName | null>(null);
   const [dateDraft, setDateDraft] = useState(new Date());
@@ -79,17 +87,36 @@ export default function EditShipment() {
   const resolveOptions = (options: { labelKey: string; value: string }[]) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
-  const shipmentTypeOptions = resolveOptions(SHIPMENT_TYPE_OPTIONS);
-  const cargoTypeOptions = resolveOptions(CARGO_TYPES);
-  const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
-  const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
-  const statusOptions = resolveOptions(getShipmentStatusOptions(doNumber));
+  const shipmentTypeOptions = resolveOptions(types.SHIPMENT_TYPE_OPTIONS);
+  const cargoTypeOptions = resolveOptions(types.CARGO_TYPES);
+  const bookingStatusOptions = resolveOptions(types.BOOKING_STATUSES);
+  const inspectionStatusOptions = resolveOptions(types.INSPECTION_STATUSES);
+  const statusOptions = resolveOptions(types.getShipmentStatusOptions(doNumber));
   const statusOptionsWithCurrentValue = currentStatus && !statusOptions.some((option) => option.value === currentStatus)
     ? [...statusOptions, { label: currentStatus, value: currentStatus }]
     : statusOptions;
-  const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber);
+  const operationTypeLabelKey = types.getShipmentOperationLabelKey(doNumber);
   const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
   const manageLanguage = toggleLanguage;
+
+  const carrierLabel =
+    shipmentType === 'maritime'
+      ? t('shipmentForm.labels.carrierMaritime')
+      : shipmentType === 'air'
+        ? t('shipmentForm.labels.carrierAir')
+        : shipmentType === 'land'
+          ? t('shipmentForm.labels.carrierLand')
+          : t('shipmentForm.labels.carrier');
+
+  const carrierPlaceholder =
+    shipmentType === 'maritime'
+      ? t('shipmentForm.placeholders.carrierMaritime')
+      : shipmentType === 'air'
+        ? t('shipmentForm.placeholders.carrierAir')
+        : shipmentType === 'land'
+          ? t('shipmentForm.placeholders.carrierLand')
+          : t('shipmentForm.placeholders.carrier');
+
   useEffect(() => {
     void loadShipment();
   }, [id]);
@@ -105,7 +132,7 @@ export default function EditShipment() {
       if (error) throw error;
 
       setDoNumber(data.do_number || '');
-      setShipmentType(normalizeShipmentType(data.shipment_type));
+      setShipmentType(types.normalizeShipmentType(data.shipment_type));
       setCurrentStatus(data.current_status || '');
       setCurrentLocation(data.current_location || '');
       setExporter(data.exporter || '');
@@ -127,6 +154,14 @@ export default function EditShipment() {
       setContainerNumber(data.container_number || '');
       setCarrier(data.carrier || '');
       setClientId(data.client_id || '');
+
+      const { data: docsData } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('shipment_id', id)
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .order('created_at', { ascending: false });
+      setDocuments((docsData as types.DocumentRecord[]) ?? []);
     } catch {
       notification.error(t('editShipment.loadError'));
     } finally {
@@ -145,50 +180,68 @@ export default function EditShipment() {
       return;
     }
 
+    if (shipmentType === 'air' && airWaybill && !/^\d{3}-\d{7,8}$/.test(airWaybill.trim())) {
+      notification.error(t('createShipment.awbFormatError'));
+      return;
+    }
+
+    if (shipmentType === 'maritime' && containerNumber && !/^[A-Z]{4}\d{7}$/.test(containerNumber.trim().toUpperCase())) {
+      notification.error(t('createShipment.containerFormatError'));
+      return;
+    }
+
     setSaving(true);
 
     try {
+      const cleanString = (val: string | null | undefined): string | null => {
+        if (typeof val !== 'string') return null;
+        const trimmed = val.trim();
+        return trimmed.length > 0 ? trimmed : null;
+      };
+
       const { error: updateError } = await supabase
         .from('shipments')
         .update({
-          do_number: doNumber,
-          shipment_type: shipmentType || null,
-          current_status: currentStatus,
-          current_location: currentLocation,
-          exporter,
-          consignee,
-          origin,
-          destination,
+          do_number: cleanString(doNumber) || doNumber,
+          shipment_type: cleanString(shipmentType),
+          current_status: cleanString(currentStatus),
+          current_location: cleanString(currentLocation),
+          exporter: cleanString(exporter),
+          consignee: cleanString(consignee),
+          origin: cleanString(origin),
+          destination: cleanString(destination),
           etd: etd || null,
           eta: eta || null,
           atd: atd || null,
           ata: ata || null,
           documentary_cutoff: documentaryCutoff || null,
-          incoterm: incoterm || null,
-          cargo_type: cargoType || null,
+          incoterm: cleanString(incoterm),
+          cargo_type: cleanString(cargoType),
           free_days: freeDays ? Number(freeDays) : null,
-          booking_status: bookingStatus || null,
-          inspection_status: inspectionStatus || null,
-          air_waybill: airWaybill || null,
-          flight_vessel: flightVessel || null,
-          container_number: containerNumber || null,
-          carrier: carrier || null,
+          booking_status: cleanString(bookingStatus),
+          inspection_status: cleanString(inspectionStatus),
+          air_waybill: cleanString(airWaybill),
+          flight_vessel: cleanString(flightVessel),
+          container_number: cleanString(containerNumber),
+          carrier: cleanString(carrier),
           updated_by: userId,
         })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      if (observation) {
+      const cleanObs = cleanString(observation);
+      if (cleanObs) {
         const { error: updateLogError } = await supabase.from('shipment_updates').insert({
           shipment_id: id,
-          status: currentStatus,
-          location: currentLocation,
-          observation,
-          updated_by: userId
+          location: cleanString(currentLocation),
+          observation: cleanObs,
+          updated_by: userId,
         });
 
-        if (updateLogError) throw updateLogError;
+        if (updateLogError) {
+          console.warn('Update log error:', updateLogError);
+        }
       }
 
       await notifyShipmentEvent({
@@ -234,7 +287,10 @@ export default function EditShipment() {
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('shipments').delete().eq('id', shipmentId);
+      const { error } = await supabase
+        .from('shipments')
+        .update({ status: 'inactive' })
+        .eq('id', shipmentId);
       if (error) throw error;
 
       await notifyShipmentEvent({
@@ -254,6 +310,107 @@ export default function EditShipment() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    const shipmentId = String(id ?? '');
+    if (!shipmentId) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      setUploadingDocument(true);
+
+      const safeName = asset.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `${shipmentId}/${Date.now()}_${safeName}`;
+
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, blob, {
+          contentType: asset.mimeType || 'application/pdf',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: insertedDoc, error: insertError } = await supabase
+        .from('documents')
+        .insert({
+          shipment_id: shipmentId,
+          file_name: asset.name,
+          file_size: asset.size ?? 0,
+          file_path: storagePath,
+          storage_path: storagePath,
+          uploaded_by: userId,
+          is_deleted: false,
+        })
+        .select('*')
+        .single();
+
+      if (insertError) throw insertError;
+
+      setDocuments((prev) => [insertedDoc, ...prev]);
+      notification.success(t('shipmentDetail.uploadSuccess', { defaultValue: 'Documento subido correctamente' }));
+    } catch (err: any) {
+      notification.error(err?.message || t('shipmentDetail.uploadError', { defaultValue: 'Error al subir documento' }));
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleOpenDocument = async (doc: types.DocumentRecord) => {
+    const rawPath = doc.file_path || doc.storage_path;
+    if (!rawPath) {
+      notification.error(t('shipmentDetail.docNoPath', { defaultValue: 'Ruta no encontrada' }));
+      return;
+    }
+    setOpeningDocumentId(doc.id);
+    try {
+      const { data, error } = await supabase.storage.from('documents').createSignedUrl(rawPath, 3600);
+      if (error || !data?.signedUrl) throw error || new Error('No se generó URL');
+      await Linking.openURL(data.signedUrl);
+    } catch {
+      notification.error(t('shipmentDetail.docOpenError', { defaultValue: 'No se pudo abrir el documento' }));
+    } finally {
+      setOpeningDocumentId(null);
+    }
+  };
+
+  const handleDeleteDocument = async (doc: types.DocumentRecord) => {
+    const confirmed = await notification.confirm({
+      title: t('shipmentDetail.deleteDocTitle', { defaultValue: 'Eliminar documento' }),
+      message: t('shipmentDetail.deleteDocConfirm', {
+        fileName: doc.file_name,
+        defaultValue: `¿Eliminar "${doc.file_name}"?`,
+      }),
+      confirmLabel: t('common.delete', { defaultValue: 'Eliminar' }),
+      cancelLabel: t('common.cancel', { defaultValue: 'Cancelar' }),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setDeletingDocumentId(doc.id);
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ is_deleted: true })
+        .eq('id', doc.id);
+      if (error) throw error;
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      notification.success(t('shipmentDetail.deleteDocOk', { defaultValue: 'Documento eliminado' }));
+    } catch {
+      notification.error(t('shipmentDetail.deleteDocError', { defaultValue: 'Error al eliminar documento' }));
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -333,7 +490,7 @@ export default function EditShipment() {
   const fieldStyle = [styles.fieldContainer, !isDesktop && styles.fieldContainerMobile];
 
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <AuthScreenBackground />
       <Header
         isDesktop= {isDesktop}
@@ -352,30 +509,6 @@ export default function EditShipment() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.heroCard, styles.shadowCard, !isDesktop && styles.heroCardMobile]}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroTitle}>{doNumber || t('shipmentForm.labels.doNumber')}</Text>
-              <Text style={styles.heroMeta}>
-                {currentStatus || t('shipmentForm.labels.status')}
-                {currentLocation ? ` · ${currentLocation}` : ''}
-              </Text>
-            </View>
-            <View style={[styles.heroActions, !isDesktop && styles.heroActionsMobile]}>
-              <TouchableOpacity style={[styles.secondaryButton, !isDesktop && styles.actionButtonMobile, saving && styles.buttonDisabled]} onPress={handleDelete} disabled={saving}>
-                <Ionicons name="trash-outline" size={18} color={AUTH_COLORS.danger} />
-                <Text style={styles.secondaryButtonDangerText}>{t('common.delete')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryButton, !isDesktop && styles.actionButtonMobile, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-                <Ionicons name="save-outline" size={18} color={AUTH_COLORS.primaryText} />
-                <Text style={styles.primaryButtonText}>
-                  {saving ? t('editShipment.saving') : t('common.save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
         <View style={[styles.form, styles.shadowCard, !isDesktop && styles.formMobile]}>
           <FormSection title={t('shipmentForm.sections.shipmentInfo')}>
             <View style={rowStyle}>
@@ -401,7 +534,7 @@ export default function EditShipment() {
                 <InputField label={t('shipmentForm.labels.destination')} value={destination} onChangeText={setDestination} onSubmitEditing={handleSave} />
               </View>
               <View style={fieldStyle}>
-                <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
+                <SelectField label={t('shipmentForm.labels.incoterm')} value={incoterm} onValueChange={setIncoterm} options={types.INCOTERMS} placeholder={t('shipmentForm.placeholders.incoterm')} />
               </View>
             </View>
 
@@ -409,13 +542,8 @@ export default function EditShipment() {
               <View style={fieldStyle}>
                 <SelectField label={t('shipmentForm.labels.cargoType')} value={cargoType} onValueChange={setCargoType} options={cargoTypeOptions} placeholder={t('shipmentForm.placeholders.cargoType')} />
               </View>
-              <View style={fieldStyle}>
-                <View/>
-              </View>
-              <View style={fieldStyle}>
-                <View/>
-              </View>
             </View>
+
           </FormSection>
 
           <FormSection title={t('shipmentForm.sections.dates')}>
@@ -509,7 +637,7 @@ export default function EditShipment() {
 
             <View style={rowStyle}>
               <View style={fieldStyle}>
-                <InputField label={t('shipmentForm.labels.carrier')} value={carrier} onChangeText={setCarrier} onSubmitEditing={handleSave} />
+                <InputField label={carrierLabel} value={carrier} onChangeText={setCarrier} placeholder={carrierPlaceholder} onSubmitEditing={handleSave} />
               </View>
               <View style={fieldStyle}>
                 <View />
@@ -519,7 +647,6 @@ export default function EditShipment() {
               </View>
             </View>
           </FormSection>
-
           <FormSection title={t('shipmentForm.sections.notes')}>
             <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>
             <TextInput
@@ -532,6 +659,88 @@ export default function EditShipment() {
               numberOfLines={4}
             />
           </FormSection>
+          
+          <FormSection title={t('shipmentDetail.sectionDocuments')}>
+            <View style={styles.documentSectionHeader}>
+              <Text style={styles.documentSectionDesc}>
+                {t('shipmentDetail.documentsDescription', { defaultValue: 'Gestiona los documentos PDF asociados a esta carga' })}
+              </Text>
+              <TouchableOpacity
+                style={styles.uploadDocBtn}
+                onPress={handleUploadDocument}
+                disabled={uploadingDocument}
+              >
+                {uploadingDocument ? (
+                  <ActivityIndicator size="small" color={AUTH_COLORS.orange} />
+                ) : (
+                  <>
+                    <Ionicons name="cloud-upload-outline" size={16} color={AUTH_COLORS.orange} />
+                    <Text style={styles.uploadDocBtnText}>
+                      {t('shipmentDetail.uploadDocument', { defaultValue: 'Cargar documento' })}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {documents.length > 0 ? (
+              <View style={styles.documentsWrap}>
+                {documents.map((doc) => (
+                  <View key={doc.id} style={styles.documentItemRow}>
+                    <TouchableOpacity
+                      style={styles.documentClickArea}
+                      onPress={() => handleOpenDocument(doc)}
+                      disabled={openingDocumentId === doc.id}
+                    >
+                      <View style={styles.documentIconWrap}>
+                        <Ionicons name="document-text-outline" size={18} color={AUTH_COLORS.blue} />
+                      </View>
+                      <View style={styles.documentMetaWrap}>
+                        <Text style={styles.documentTitle} numberOfLines={1}>{doc.file_name}</Text>
+                        <Text style={styles.documentSize}>
+                          {openingDocumentId === doc.id
+                            ? t('shipmentDetail.opening')
+                            : `${Math.round((doc.file_size || 0) / 1024)} KB`}
+                        </Text>
+                      </View>
+                      <Ionicons name="open-outline" size={16} color={AUTH_COLORS.secondaryText} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteDocBtn}
+                      onPress={() => handleDeleteDocument(doc)}
+                      disabled={deletingDocumentId === doc.id}
+                      accessibilityLabel="Eliminar documento"
+                    >
+                      {deletingDocumentId === doc.id ? (
+                        <ActivityIndicator size="small" color={AUTH_COLORS.danger} />
+                      ) : (
+                        <Ionicons name="trash-outline" size={16} color={AUTH_COLORS.danger} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyDocsBox}>
+                <Ionicons name="document-outline" size={24} color={AUTH_COLORS.secondaryText} />
+                <Text style={styles.emptyDocsText}>
+                  {t('dashboard.emptyDocuments')}
+                </Text>
+              </View>
+            )}
+          </FormSection>
+
+          <View style={styles.deleteFormActionRow}>
+            <TouchableOpacity
+              style={[styles.deleteFormBtn, saving && styles.buttonDisabled]}
+              onPress={handleDelete}
+              disabled={saving}
+            >
+              <Ionicons name="trash-outline" size={16} color={AUTH_COLORS.danger} />
+              <Text style={styles.deleteFormBtnText}>{t('editShipment.deleteShipment', { defaultValue: 'Eliminar carga' })}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {Platform.OS !== 'web' && activeDateField ? (
@@ -586,6 +795,26 @@ export default function EditShipment() {
           />
         ) : null}
       </ScrollView>
+
+      <TouchableOpacity
+        style={[
+          styles.saveFab,
+          !isDesktop && styles.saveFabMobile,
+          saving && styles.buttonDisabled,
+        ]}
+        onPress={handleSave}
+        disabled={saving}
+        activeOpacity={0.85}
+      >
+        {saving ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <>
+            <Ionicons name="save-outline" size={20} color="#ffffff" />
+            <Text style={styles.saveFabText}>{t('common.save')}</Text>
+          </>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -596,6 +825,7 @@ type InputFieldProps = {
   onChangeText: (text: string) => void;
   onSubmitEditing?: () => void;
   keyboardType?: 'default' | 'numeric' | 'email-address';
+  placeholder?: string;
 };
 
 type FormSectionProps = {
@@ -612,7 +842,7 @@ function FormSection({ title, children }: FormSectionProps) {
   );
 }
 
-function InputField({ label, value, onChangeText, onSubmitEditing, keyboardType }: InputFieldProps) {
+function InputField({ label, value, onChangeText, onSubmitEditing, keyboardType, placeholder }: InputFieldProps) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
@@ -621,6 +851,8 @@ function InputField({ label, value, onChangeText, onSubmitEditing, keyboardType 
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType}
+        placeholder={placeholder}
+        placeholderTextColor={AUTH_COLORS.secondaryText}
         returnKeyType="done"
         onSubmitEditing={onSubmitEditing}
       />
@@ -734,8 +966,8 @@ function DateField({ label, value, placeholder, onPress, onChangeText, mode }: D
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: AUTH_COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   center: {
     justifyContent: 'center',
@@ -749,6 +981,7 @@ const styles = StyleSheet.create({
   contentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
+    paddingBottom: 64,
   },
   contentMobile: {
     paddingHorizontal: 12,
@@ -759,39 +992,7 @@ const styles = StyleSheet.create({
   },
   shadowCard: AUTH_SHADOW,
   heroCard: {
-    backgroundColor: AUTH_COLORS.surface,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.line,
-    padding: 22,
-    gap: 18,
-  },
-  heroCardMobile: {
-    padding: 16,
-    borderRadius: 20,
-  },
-  heroTop: {
-    gap: 16,
-  },
-  heroCopy: {
-    gap: 4,
-  },
-  heroTitle: {
-    color: AUTH_COLORS.primaryText,
-    fontSize: 30,
-    fontWeight: '800',
-  },
-  heroMeta: {
-    color: AUTH_COLORS.secondaryText,
-    fontSize: 14,
-  },
-  heroActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  heroActionsMobile: {
-    flexDirection: 'column',
+    // Deprecated - layout refactored into uniform form
   },
   form: {
     padding: 18,
@@ -804,6 +1005,148 @@ const styles = StyleSheet.create({
   formMobile: {
     padding: 14,
     borderRadius: 20,
+  },
+  documentSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  documentSectionDesc: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    flex: 1,
+    minWidth: 200,
+  },
+  uploadDocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+  },
+  uploadDocBtnText: {
+    color: AUTH_COLORS.orange,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  documentsWrap: {
+    gap: 8,
+  },
+  documentItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  documentClickArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  documentIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: AUTH_COLORS.blueSoft,
+  },
+  documentMetaWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  documentTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  documentSize: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  deleteDocBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  emptyDocsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 18,
+    borderRadius: 14,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  emptyDocsText: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+  },
+  deleteFormActionRow: {
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: AUTH_COLORS.line,
+    alignItems: 'flex-start',
+  },
+  deleteFormBtn: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  deleteFormBtnText: {
+    color: AUTH_COLORS.danger,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  saveFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: AUTH_COLORS.orange,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 99,
+  },
+  saveFabMobile: {
+    bottom: AUTH_MOBILE_DOCK_PADDING + 16,
+    right: 16,
+  },
+  saveFabText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   formSection: {
     gap: 8,

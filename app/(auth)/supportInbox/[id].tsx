@@ -16,11 +16,10 @@ import {
 } from 'react-native';
 import {
     AUTH_SHADOW,
-    AuthHeader,
-    AuthHeaderAction,
     AuthScreenBackground
 } from '../../../components/auth/AuthChrome';
 import { AUTH_MOBILE_DOCK_PADDING } from '../../../components/auth/AuthNavigation';
+import Header from '../../../components/Header';
 import { useNativeNotification } from '../../../components/ui/NativeNotification';
 import { useResponsive } from '../../../hooks/useResponsive';
 import {
@@ -37,10 +36,12 @@ type Ticket = {
   user_id: string | null;
   message: string;
   ticket_status: string | null;
+  category?: string | null;
   created_at: string;
   resolved_at: string | null;
   user_email?: string | null;
   user_nickname?: string | null;
+  resolved_by_name?: string | null;
 };
 
 export default function TicketDetail() {
@@ -52,6 +53,7 @@ export default function TicketDetail() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [isInternal, setIsInternal] = useState(true);
   const ticketId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
 
   const statusLabels = useMemo(
@@ -112,6 +114,13 @@ export default function TicketDetail() {
         router.replace('/login');
         return;
       }
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('is_internal')
+        .eq('id', user.id)
+        .maybeSingle();
+      setIsInternal(Boolean(profileData?.is_internal));
 
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
@@ -236,13 +245,18 @@ export default function TicketDetail() {
   const emailLabel = ticket.user_email?.trim() ? ticket.user_email : t('supportInbox.noEmail');
   const doLabel = ticket.do_number?.trim() ? ticket.do_number : t('supportInbox.noDo');
 
+  const categoryLabel = ticket.category
+    ? t(`chatbot.options.${ticket.category}`, { defaultValue: ticket.category })
+    : null;
+
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <AuthScreenBackground />
-      <AuthHeader
+      <Header
         title={t('ticketDetail.headerTitle')}
         isDesktop={isDesktop}
-        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+        showSearch={false}
+        onGoBack={backFunction}
       />
 
       <ScrollView
@@ -268,6 +282,13 @@ export default function TicketDetail() {
           <View style={styles.heroStats}>
             <StatCard label={t('ticketDetail.labels.createdAt')} value={createdLabel} icon="time-outline" />
             <StatCard label={t('ticketDetail.labels.resolvedAt')} value={resolvedLabel} icon="checkmark-done-outline" />
+            {ticket.ticket_status === 'resolved' && ticket.resolved_by_name ? (
+              <StatCard
+                label={t('ticketDetail.labels.resolvedBy', { defaultValue: 'Resuelto por' })}
+                value={ticket.resolved_by_name}
+                icon="person-circle-outline"
+              />
+            ) : null}
           </View>
         </View>
 
@@ -279,47 +300,61 @@ export default function TicketDetail() {
         <View style={[styles.section, styles.shadowCard]}>
           <Text style={styles.sectionTitle}>{t('ticketDetail.sectionInfo')}</Text>
           <InfoRow label={t('ticketDetail.labels.doNumber')} value={doLabel} />
+          {categoryLabel ? (
+            <InfoRow
+              label={t('ticketCreateScreen.categoryLabel', { defaultValue: 'Área / Categoría' })}
+              value={categoryLabel}
+            />
+          ) : null}
           <InfoRow label={t('ticketDetail.labels.email')} value={emailLabel} />
           <InfoRow label={t('ticketDetail.labels.status')} value={statusLabel} />
+          {ticket.ticket_status === 'resolved' && ticket.resolved_by_name ? (
+            <InfoRow
+              label={t('ticketDetail.labels.resolvedBy', { defaultValue: 'Resuelto por' })}
+              value={ticket.resolved_by_name}
+            />
+          ) : null}
         </View>
 
-        <View style={[styles.section, styles.shadowCard]}>
-          <Text style={styles.sectionTitle}>{t('ticketDetail.sectionActions')}</Text>
-          <View style={styles.actionsRow}>
-            {ticket.ticket_status !== 'resolved' ? (
-              <>
+        {isInternal && (
+          <View style={[styles.section, styles.shadowCard]}>
+            <Text style={styles.sectionTitle}>{t('ticketDetail.sectionActions')}</Text>
+            <View style={styles.actionsRow}>
+              {ticket.ticket_status !== 'resolved' ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, updating && styles.buttonDisabled]}
+                    onPress={() => updateStatus('in_revision')}
+                    disabled={Boolean(updating)}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      {updating === 'in_revision' ? t('ticketDetail.updating') : t('ticketDetail.actionInRevision')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, updating && styles.buttonDisabled]}
+                    onPress={() => updateStatus('resolved')}
+                    disabled={Boolean(updating)}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {updating === 'resolved' ? t('ticketDetail.updating') : t('ticketDetail.actionResolve')}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <TouchableOpacity
                   style={[styles.secondaryButton, updating && styles.buttonDisabled]}
-                  onPress={() => updateStatus('in_revision')}
+                  onPress={() => updateStatus('opened')}
                   disabled={Boolean(updating)}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    {updating === 'in_revision' ? t('ticketDetail.updating') : t('ticketDetail.actionInRevision')}
+                    {updating === 'opened' ? t('ticketDetail.updating') : t('ticketDetail.actionReopen')}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.primaryButton, updating && styles.buttonDisabled]}
-                  onPress={() => updateStatus('resolved')}
-                  disabled={Boolean(updating)}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    {updating === 'resolved' ? t('ticketDetail.updating') : t('ticketDetail.actionResolve')}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity
-                style={[styles.secondaryButton, updating && styles.buttonDisabled]}
-                onPress={() => updateStatus('opened')}
-                disabled={Boolean(updating)}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {updating === 'opened' ? t('ticketDetail.updating') : t('ticketDetail.actionReopen')}
-                </Text>
-              </TouchableOpacity>
-            )}
+              )}
+            </View>
           </View>
-        </View>
+        )}
       </ScrollView>
     </View>
   );

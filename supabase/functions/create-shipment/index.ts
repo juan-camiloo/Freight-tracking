@@ -8,13 +8,11 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 export const config = { auth: true };
 
-const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
 const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
@@ -232,46 +230,52 @@ serve(async (req) => {
         400,
       );
     }
-    const doPrefix = (body.do_number as string)?.[0]?.toLowerCase();
-    const operationType = doPrefix === 'x' ? 'EXPO' : 'IMPO';
-    const folderResponse = await fetch('https://default470219e75ba1443584e0186963d8e1.20.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/aed6f86809f2474fbe02f08db48046b9/triggers/manual/paths/invoke?api-version=1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        do_number: body.do_number,
-        type: operationType,
-      }),
-    });
-    console.log('Power Automate response status:', folderResponse.status);
-    const folderBody = await folderResponse.text();
-    console.log('Power Automate response body:', folderBody);
-    // 8) Registrar la primera novedad de tracking del ciclo de vida de la carga.
-    // Garantiza que siempre haya al menos un evento inicial en el historial.
-    const { data: shipmentUpdateData, error: shipmentUpdateError } = await supabase
-      .from("shipment_updates")
-      .insert({
-        shipment_id: shipmentData?.id,
-        status: body.current_status ?? null,
-        location: body.current_location ?? null,
-        observation: body.observation || null,
-      })
-      .select()
-      .single();
+    try {
+      const doPrefix = (body.do_number as string)?.[0]?.toLowerCase();
+      const operationType = doPrefix === 'x' ? 'EXPO' : 'IMPO';
+      const folderResponse = await fetch('https://default470219e75ba1443584e0186963d8e1.20.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/aed6f86809f2474fbe02f08db48046b9/triggers/manual/paths/invoke?api-version=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          do_number: body.do_number,
+          type: operationType,
+        }),
+      });
+      console.log('Power Automate response status:', folderResponse.status);
+    } catch (paError) {
+      console.warn('Power Automate trigger failed (non-blocking):', paError);
+    }
+    // 8) Registrar novedad de tracking solo si se incluyó una observación con texto.
+    let shipmentUpdateData = null;
+    const hasObservation = typeof body.observation === "string" && body.observation.trim().length > 0;
+    if (hasObservation) {
+      const { data: updateData, error: shipmentUpdateError } = await supabase
+        .from("shipment_updates")
+        .insert({
+          shipment_id: shipmentData?.id,
+          status: body.current_status ?? null,
+          location: body.current_location ?? null,
+          observation: body.observation.trim(),
+          updated_by: userId,
+        })
+        .select()
+        .single();
 
-    if (shipmentUpdateError) {
-      return jsonResponse(
-        {
-          error: "No se pudo registrar la primera novedad",
-          error_key: "createShipment.updateError",
-          details: shipmentUpdateError.message,
-        },
-        400,
-      );
+      if (shipmentUpdateError) {
+        return jsonResponse(
+          {
+            error: "No se pudo registrar la primera novedad",
+            error_key: "createShipment.updateError",
+            details: shipmentUpdateError.message,
+          },
+          400,
+        );
+      }
+      shipmentUpdateData = updateData;
     }
 
-    // Devuelve el merge del shipment y su primera novedad para que el cliente
-    // tenga todo el estado inicial en una sola respuesta.
-    return jsonResponse({ ...shipmentData, ...shipmentUpdateData }, 201);
+    // Devuelve la información de la carga (y la novedad si se creó)
+    return jsonResponse({ ...shipmentData, ...(shipmentUpdateData ?? {}) }, 201);
   } catch (error) {
     // Captura errores no controlados para evitar exponer stack traces al cliente.
     return jsonResponse(

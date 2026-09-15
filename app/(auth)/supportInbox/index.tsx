@@ -16,12 +16,11 @@ import {
 import {
     AUTH_COLORS,
     AUTH_SHADOW,
-    AuthHeader,
-    AuthHeaderAction,
     AuthScreenBackground,
 } from '../../../components/auth/AuthChrome';
 import { AUTH_MOBILE_DOCK_PADDING } from '../../../components/auth/AuthNavigation';
 import { AuthSearchBar } from '../../../components/auth/AuthSearchBar';
+import Header from '../../../components/Header';
 import { useNativeNotification } from '../../../components/ui/NativeNotification';
 import { useResponsive } from '../../../hooks/useResponsive';
 import { listTicketsFunctionUrl, supabase, supabaseAnonKey } from '../../../lib/URLs';
@@ -33,10 +32,12 @@ type Ticket = {
   user_id: string | null;
   message: string;
   ticket_status: string | null;
+  category?: string | null;
   created_at: string;
   resolved_at: string | null;
   user_email?: string | null;
   user_nickname?: string | null;
+  resolved_by_name?: string | null;
 };
 
 const isAbortError = (error: unknown) =>
@@ -53,6 +54,7 @@ export default function SupportInbox() {
   const [searchResults, setSearchResults] = useState<Ticket[]>([]);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isInternal, setIsInternal] = useState(true);
 
   const statusLabels = useMemo(
     () => ({
@@ -121,6 +123,13 @@ export default function SupportInbox() {
         router.replace('/login');
         return;
       }
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('is_internal')
+        .eq('id', user.id)
+        .maybeSingle();
+      setIsInternal(Boolean(profileData?.is_internal));
 
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
@@ -191,12 +200,13 @@ export default function SupportInbox() {
   const listData = searchQuery.trim().length > 0 ? searchResults : tickets;
 
   return (
-    <View style={[styles.container, { minHeight: height }]}>
+    <View style={styles.container}>
       <AuthScreenBackground />
-      <AuthHeader
+      <Header
         title={t('supportInbox.headerTitle')}
         isDesktop={isDesktop}
-        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+        showSearch={false}
+        onGoBack={backFunction}
       />
 
       <FlatList
@@ -232,6 +242,9 @@ export default function SupportInbox() {
           const messageText = item.message ?? '';
           const preview =
             messageText.length > 120 ? `${messageText.slice(0, 120).trim()}...` : messageText;
+          const categoryLabel = item.category
+            ? t(`chatbot.options.${item.category}`, { defaultValue: item.category })
+            : null;
 
           return (
             <TouchableOpacity
@@ -248,7 +261,14 @@ export default function SupportInbox() {
                   <Ionicons name="mail-open-outline" size={18} color={AUTH_COLORS.blue} />
                 </View>
                 <View style={styles.cardCopy}>
-                  <Text style={styles.cardDO}>{doLabel}</Text>
+                  <View style={styles.rowDoCategory}>
+                    <Text style={styles.cardDO}>{doLabel}</Text>
+                    {categoryLabel ? (
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>{categoryLabel}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <Text style={styles.cardEmail}>{emailLabel}</Text>
                 </View>
                 <View style={[styles.statusPill, { backgroundColor: statusTone.backgroundColor }]}>
@@ -258,6 +278,20 @@ export default function SupportInbox() {
 
               {createdLabel ? (
                 <Text style={styles.cardDate}>{t('supportInbox.createdAt', { date: createdLabel })}</Text>
+              ) : null}
+
+              {item.ticket_status === 'resolved' && (item.resolved_by_name || item.resolved_at) ? (
+                <View style={styles.resolvedInfoRow}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color={AUTH_COLORS.green} />
+                  <Text style={styles.resolvedInfoText}>
+                    {item.resolved_by_name
+                      ? `${t('ticketDetail.actionResolve', { defaultValue: 'Resuelto' })} por: ${item.resolved_by_name}`
+                      : t('supportInbox.statusResolved')}
+                    {item.resolved_at
+                      ? ` · ${formatDateDisplay(item.resolved_at, i18n.language === 'es' ? 'es-CO' : 'en-US')}`
+                      : ''}
+                  </Text>
+                </View>
               ) : null}
 
               <Text style={styles.cardMessage}>{preview}</Text>
@@ -273,6 +307,17 @@ export default function SupportInbox() {
           </View>
         }
       />
+
+      {!isInternal && (
+        <TouchableOpacity
+          style={[styles.fab, !isDesktop && styles.fabMobile]}
+          onPress={() => router.push('/createTicket')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add-outline" size={22} color={AUTH_COLORS.white} />
+          <Text style={styles.fabText}>{t('dashboard.fabCreateTicket') || 'Crear ticket'}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -280,8 +325,8 @@ export default function SupportInbox() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: AUTH_COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   center: {
     justifyContent: 'center',
@@ -297,6 +342,7 @@ const styles = StyleSheet.create({
   listContentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
+    paddingBottom: 64,
   },
   listContentMobile: {
     paddingHorizontal: 16,
@@ -388,4 +434,54 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
   },
+  rowDoCategory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  categoryBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(56, 139, 253, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 139, 253, 0.3)',
+  },
+  categoryText: {
+    color: '#58A6FF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  resolvedInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+    marginBottom: 4,
+  },
+  resolvedInfoText: {
+    color: AUTH_COLORS.green,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: AUTH_COLORS.orange,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 999,
+    shadowColor: AUTH_COLORS.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
+  },
+  fabMobile: { bottom: AUTH_MOBILE_DOCK_PADDING + 12 },
+  fabText: { color: AUTH_COLORS.white, fontSize: 14, fontWeight: '700' },
 });

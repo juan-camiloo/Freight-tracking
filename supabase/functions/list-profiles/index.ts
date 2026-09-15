@@ -7,10 +7,8 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const url = "https://como-va-mi-carga.ingelox.com.co" || "http://localhost:8081"
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": url,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "OPTIONS, POST, GET",

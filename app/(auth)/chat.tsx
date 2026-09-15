@@ -1,4 +1,4 @@
-﻿// Pantalla: chat IA
+// Pantalla: chat IA
 // Objetivo:
 // - Mostrar conversacion con asistente de cargas (estado local).
 // - Enviar mensajes a la Edge Function `chat-assistant`.
@@ -21,10 +21,10 @@ import {
 import {
   AUTH_COLORS,
   AUTH_SHADOW,
-  AuthHeaderAction,
   AuthScreenBackground,
 } from '../../components/auth/AuthChrome';
-import { AUTH_MOBILE_DOCK_PADDING } from '../../components/auth/AuthNavigation';
+import Header from '../../components/Header';
+import { AUTH_MOBILE_DOCK_PADDING, toggleLanguage } from '../../components/auth/AuthNavigation';
 import { useResponsive } from '../../hooks/useResponsive';
 import {
   chatAssistantFunctionUrl,
@@ -336,10 +336,12 @@ export default function ChatAssistantScreen() {
       keyboardVerticalOffset={keyboardOffset}
     >
       <AuthScreenBackground />
-      <AuthHeader
-        title={t('dashboard.fabAssistant')}
+      <Header
         isDesktop={isDesktop}
-        actions={<AuthHeaderAction label={t('common.back')} icon="arrow-back-outline" onPress={backFunction} />}
+        title={t('dashboard.fabAssistant')}
+        showSearch={false}
+        onGoBack={backFunction}
+        onToggleLanguage={toggleLanguage}
       />
 
       <View style={[styles.content, !isDesktop && styles.contentWithDock]}>

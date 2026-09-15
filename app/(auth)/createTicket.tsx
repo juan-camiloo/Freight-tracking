@@ -159,7 +159,7 @@ export default function CreateTicketScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { minHeight: height }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardOffset}
     >
@@ -244,8 +244,8 @@ export default function CreateTicketScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: AUTH_COLORS.backgroundBottom,
-    overflow: 'hidden',
   },
   scroll: { flex: 1 },
   content: {
@@ -255,6 +255,7 @@ const styles = StyleSheet.create({
   contentDesktop: {
     paddingHorizontal: 28,
     paddingTop: 24,
+    paddingBottom: 64,
     alignItems: 'center',
   },
   contentMobile: {
