@@ -2,23 +2,16 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
 [build]
   command = "npx expo export -p web && sed -i 's|</head>|<meta name=\"google-site-verification\" content=\"XeN0bbfqcXGL9dSdzo1f_iSqlsSYrbMLBAvbpSX_8Gk\" /></head>|' dist/index.html"
   publish = "dist"
+
 [[headers]]
   for = "/*"
-   [headers.values]
+  [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains"
-   [headers.values]
-  X-Frame-Options = "DENY"
-  X-Content-Type-Options = "nosniff"
-  Referrer-Policy = "strict-origin-when-cross-origin"
-  Strict-Transport-Security = "max-age=63072000; includeSubDomains"
-  Content-Security-Policy = """
-default-src 'self';
-script-src 'self' 'unsafe-inline' https://www.gstatic.com;
-connect-src 'self' https://*.supabase.co https://fcm.googleapis.com
-"""
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fcm.googleapis.com; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; img-src 'self' data: blob: https:;"
