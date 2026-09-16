@@ -51,7 +51,6 @@ export default function EditShipmentScreen() {
   const [doNumber, setDoNumber] = useState('');
   const [shipmentType, setShipmentType] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
-  const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
   const [consignee, setConsignee] = useState('');
   const [origin, setOrigin] = useState('');
@@ -139,7 +138,6 @@ export default function EditShipmentScreen() {
       setDoNumber(data.do_number || '');
       setShipmentType(types.normalizeShipmentType(data.shipment_type));
       setCurrentStatus(data.current_status || '');
-      setCurrentLocation(data.current_location || '');
       setExporter(data.exporter || '');
       setConsignee(data.consignee || '');
       setOrigin(data.origin || '');
@@ -179,13 +177,14 @@ export default function EditShipmentScreen() {
       return;
     }
 
-    if (shipmentType === 'air' && airWaybill && !/^\d{3}-\d{7,8}$/.test(airWaybill.trim())) {
-      notification.error(t('createShipment.awbFormatError'));
+    const cleanAwb = airWaybill.trim();
+    if (cleanAwb && !/^[A-Za-z0-9\s\-_/.]{3,35}$/.test(cleanAwb)) {
+      notification.error(t('editShipment.awbFormatError', { defaultValue: t('createShipment.awbFormatError') }));
       return;
     }
 
-    if (shipmentType === 'maritime' && containerNumber && !/^[A-Z]{4}\d{7}$/.test(containerNumber.trim().toUpperCase())) {
-      notification.error(t('createShipment.containerFormatError'));
+    if (shipmentType === 'maritime' && containerNumber && !types.isValidContainerNumber(containerNumber)) {
+      notification.error(t('editShipment.containerFormatError', { defaultValue: t('createShipment.containerFormatError') }));
       return;
     }
 
@@ -204,7 +203,6 @@ export default function EditShipmentScreen() {
           do_number: cleanString(doNumber) || doNumber,
           shipment_type: cleanString(shipmentType),
           current_status: cleanString(currentStatus),
-          current_location: cleanString(currentLocation),
           exporter: cleanString(exporter),
           consignee: cleanString(consignee),
           origin: cleanString(origin),
@@ -233,7 +231,6 @@ export default function EditShipmentScreen() {
       if (cleanObs) {
         const { error: updateLogError } = await supabase.from('shipment_updates').insert({
           shipment_id: id,
-          location: cleanString(currentLocation),
           observation: cleanObs,
           updated_by: userId,
         });
@@ -603,22 +600,10 @@ export default function EditShipmentScreen() {
                 <SelectField label={t('shipmentForm.labels.status')} value={currentStatus} onValueChange={setCurrentStatus} options={statusOptionsWithCurrentValue} placeholder={t('shipmentForm.placeholders.status')} helperText={operationTypeHint} />
               </View>
               <View style={fieldStyle}>
-                <InputField label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} onSubmitEditing={handleSave} />
-              </View>
-              <View style={fieldStyle}>
                 <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
               </View>
-            </View>
-
-            <View style={rowStyle}>
               <View style={fieldStyle}>
                 <SelectField label={t('shipmentForm.labels.inspectionStatus')} value={inspectionStatus} onValueChange={setInspectionStatus} options={inspectionStatusOptions} placeholder={t('shipmentForm.placeholders.inspectionStatus')} />
-              </View>
-              <View style={fieldStyle}>
-                <View />
-              </View>
-              <View style={fieldStyle}>
-                <View />
               </View>
             </View>
           </FormSection>

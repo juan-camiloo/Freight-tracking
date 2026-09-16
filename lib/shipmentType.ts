@@ -49,7 +49,6 @@ export type ShipmentListItem = {
   destination: string;
   shipment_type?: string | null;
   current_status?: string | null;
-  current_location?: string | null;
   incoterm?: string | null;
   etd?: string | null;
   eta?: string | null;
@@ -105,7 +104,6 @@ export type ShipmentFilters = {
   statusText: string;
   origin: string;
   destination: string;
-  location: string;
   party: string;
   carrier: string;
   incoterm: string;
@@ -206,9 +204,49 @@ export function getShipmentStatusLabel(
 
 export const inferShipmentOperationType = (doNumber?: string | null): ShipmentOperationType | null => {
   const normalizedDo = doNumber?.trim().toUpperCase();
-  if (normalizedDo?.startsWith('X')) return 'expo';
-  if (normalizedDo?.startsWith('M')) return 'impo';
+  if (!normalizedDo) return null;
+  if (
+    normalizedDo.startsWith('X') ||
+    normalizedDo.startsWith('EXP') ||
+    normalizedDo.startsWith('EXP-') ||
+    normalizedDo.startsWith('EXPO')
+  ) {
+    return 'expo';
+  }
+  if (
+    normalizedDo.startsWith('M') ||
+    normalizedDo.startsWith('IMP') ||
+    normalizedDo.startsWith('IMP-') ||
+    normalizedDo.startsWith('IMPO')
+  ) {
+    return 'impo';
+  }
   return null;
+};
+
+/**
+ * Valida formato de contenedor marítimo.
+ * Admite:
+ * - Formato estándar ISO 6346 (ej: MSCU1234567, MSCU 123456-7, MSCU-123456-7)
+ * - Múltiples contenedores separados por comas, barras o espacios (ej: MSCU1234567, TCLU7654321)
+ * - Términos estándar de carga suelta / LCL (LCL, CONSOLIDADO, CARGA SUELTA)
+ */
+export const isValidContainerNumber = (value?: string | null): boolean => {
+  if (!value) return true;
+  const clean = value.trim().toUpperCase();
+  if (!clean) return true;
+
+  if (/^(LCL|CARGA\s+SUELTA|CONSOLIDADO|BREAK\s*BULK|N\/A|NO\s+APLICA)$/i.test(clean)) {
+    return true;
+  }
+
+  const parts = clean.split(/[,/;]|\s{2,}/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return true;
+
+  const containerPattern = /^[A-Z]{3,4}[-\s]?\d{6,7}(?:[-\s]?\d)?$/;
+  return parts.every(
+    (part) => containerPattern.test(part) || /^(LCL|CONSOLIDADO|CARGA\s+SUELTA)$/i.test(part)
+  );
 };
 
 export const getShipmentStatusOptions = (doNumber?: string | null): ShipmentStatusOption[] => {
@@ -267,9 +305,9 @@ export const inferShipmentType = (hints: ShipmentTypeHints = {}): ShipmentTypeVa
   const statusType = normalizeShipmentType(hints.current_status ?? hints.currentStatus);
   if (statusType) return statusType;
 
-  if (hasValue(hints.air_waybill ?? hints.airWaybill)) return 'air';
-  if (looksLikeIataCode(hints.origin) && looksLikeIataCode(hints.destination)) return 'air';
   if (hasValue(hints.container_number ?? hints.containerNumber)) return 'maritime';
+  if (looksLikeIataCode(hints.origin) && looksLikeIataCode(hints.destination)) return 'air';
+  if (hasValue(hints.air_waybill ?? hints.airWaybill)) return 'air';
 
   return '';
 };

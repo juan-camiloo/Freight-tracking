@@ -45,7 +45,6 @@ type ShipmentOption = {
   origin: string;
   destination: string;
   current_status?: string | null;
-  current_location?: string | null;
   eta?: string | null;
   shipment_type?: string | null;
   created_at?: string | null;
@@ -241,7 +240,7 @@ export function ShipmentAssignmentWorkspace({
       cleanQuery ? setSearchingShipments(true) : setShipmentsLoading(true);
       let q = supabase
         .from('shipments')
-        .select('id, do_number, origin, destination, current_status, current_location, eta, shipment_type, created_at')
+        .select('id, do_number, origin, destination, current_status, eta, shipment_type, created_at')
         .eq('status', 'active').order('created_at', { ascending: false }).limit(30);
       if (cleanQuery) q = q.or(`do_number.ilike.%${cleanQuery}%,origin.ilike.%${cleanQuery}%,destination.ilike.%${cleanQuery}%`);
       const { data, error } = await q;
@@ -594,7 +593,6 @@ export function ShipmentAssignmentWorkspace({
                       </Text>
                       <View style={styles.shipmentMetaRow}>
                         {shipment.current_status ? <Text style={styles.shipmentMeta} numberOfLines={1}>{getShipmentStatusLabel(shipment.current_status, t)}</Text> : null}
-                        {shipment.current_location ? <Text style={styles.shipmentMeta} numberOfLines={1}>{shipment.current_location}</Text> : null}
                       </View>
                     </View>
 

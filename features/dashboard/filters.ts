@@ -31,7 +31,6 @@ export const DEFAULT_FILTERS: ShipmentFilters = {
   statusText: '',
   origin: '',
   destination: '',
-  location: '',
   party: '',
   carrier: '',
   incoterm: '',
@@ -66,7 +65,6 @@ export function shipmentMatchesFilters(shipment: ShipmentListItem, filters: Ship
   if (!containsText(shipment.current_status, filters.statusText)) return false;
   if (!containsText(shipment.origin, filters.origin)) return false;
   if (!containsText(shipment.destination, filters.destination)) return false;
-  if (!containsText(shipment.current_location, filters.location)) return false;
   if (!containsAnyText([shipment.exporter, shipment.consignee], filters.party)) return false;
   if (!containsAnyText([shipment.carrier, shipment.flight_vessel, shipment.air_waybill, shipment.container_number], filters.carrier)) {
     return false;
@@ -189,7 +187,6 @@ export function getActiveFilterSummary(filters: ShipmentFilters, t: TFunction) {
   pushTextFilter(t('dashboard.filters.statusExact'), filters.statusText);
   pushTextFilter(t('dashboard.filters.origin'), filters.origin);
   pushTextFilter(t('dashboard.filters.destination'), filters.destination);
-  pushTextFilter(t('dashboard.filters.location'), filters.location);
   pushTextFilter(t('dashboard.filters.party'), filters.party);
   pushTextFilter(t('dashboard.filters.carrier'), filters.carrier);
   pushTextFilter(t('dashboard.filters.incoterm'), filters.incoterm);

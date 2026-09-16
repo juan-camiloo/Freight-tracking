@@ -33,6 +33,7 @@ import {
   getShipmentOperationLabelKey,
   getShipmentStatusOptions,
   inferShipmentOperationType,
+  isValidContainerNumber,
 } from '../../lib/shipmentType';
 import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/URLs';
 import {
@@ -72,7 +73,6 @@ export default function CreateShipment() {
   const [bookingStatus, setBookingStatus] = useState('');
   const [inspectionStatus, setInspectionStatus] = useState('');
   const [currentStatus, setCurrentStatus] = useState('expo_start_operation');
-  const [currentLocation, setCurrentLocation] = useState('');
   const [exporter, setExporter] = useState('');
   const [consignee, setConsignee] = useState('');
   const [airWaybill, setAirWaybill] = useState('');
@@ -211,12 +211,13 @@ export default function CreateShipment() {
       return;
     }
 
-    if (shipmentType === 'air' && airWaybill && !/^\d{3}-\d{7,8}$/.test(airWaybill.trim())) {
+    const cleanAwb = airWaybill.trim();
+    if (cleanAwb && !/^[A-Za-z0-9\s\-_/.]{3,35}$/.test(cleanAwb)) {
       notification.error(t('createShipment.awbFormatError'));
       return;
     }
 
-    if (shipmentType === 'maritime' && containerNumber && !/^[A-Z]{4}\d{7}$/.test(containerNumber.trim().toUpperCase())) {
+    if (shipmentType === 'maritime' && containerNumber && !isValidContainerNumber(containerNumber)) {
       notification.error(t('createShipment.containerFormatError'));
       return;
     }
@@ -262,7 +263,6 @@ export default function CreateShipment() {
           booking_status: cleanString(bookingStatus),
           inspection_status: cleanString(inspectionStatus),
           current_status: cleanString(currentStatus),
-          current_location: cleanString(currentLocation),
           exporter: cleanString(exporter),
           consignee: cleanString(consignee),
           air_waybill: cleanString(airWaybill),
@@ -276,7 +276,7 @@ export default function CreateShipment() {
       });
 
       if (!response.ok) {
-        const errorMessage = await resolveErrorMessage(response, t('createShipment.createError'));
+        const errorMessage = await resolveErrorMessage(response, t('createShipment.createError'), t);
         throw new Error(errorMessage);
       }
 
@@ -441,22 +441,10 @@ export default function CreateShipment() {
                 <SelectField label={t('shipmentForm.labels.status')} value={currentStatus} onValueChange={setCurrentStatus} options={statusOptionsWithCurrentValue} placeholder={t('shipmentForm.placeholders.status')} helperText={operationTypeHint} />
               </View>
               <View style={fieldStyle}>
-                <Field label={t('shipmentForm.labels.location')} value={currentLocation} onChangeText={setCurrentLocation} placeholder={t('shipmentForm.placeholders.location')} onSubmitEditing={handleCreate} />
-              </View>
-              <View style={fieldStyle}>
                 <SelectField label={t('shipmentForm.labels.bookingStatus')} value={bookingStatus} onValueChange={setBookingStatus} options={bookingStatusOptions} placeholder={t('shipmentForm.placeholders.bookingStatus')} />
               </View>
-            </View>
-
-            <View style={rowStyle}>
               <View style={fieldStyle}>
                 <SelectField label={t('shipmentForm.labels.inspectionStatus')} value={inspectionStatus} onValueChange={setInspectionStatus} options={inspectionStatusOptions} placeholder={t('shipmentForm.placeholders.inspectionStatus')} />
-              </View>
-              <View style={fieldStyle}>
-                <View />
-              </View>
-              <View style={fieldStyle}>
-                <View />
               </View>
             </View>
             <Text style={styles.label}>{t('shipmentForm.labels.observation')}</Text>

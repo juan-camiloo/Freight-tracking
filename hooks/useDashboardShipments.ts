@@ -83,7 +83,7 @@ export function useDashboardShipments() {
           .from('shipments')
           .select(`
             id, do_number, origin, destination, shipment_type,
-            current_status, current_location, incoterm, etd, eta,
+            current_status, incoterm, etd, eta,
             atd, ata, documentary_cutoff, booking_status, inspection_status,
             cargo_type, free_days, carrier, flight_vessel, air_waybill,
             container_number, exporter, consignee, created_at, created_by, 
@@ -115,7 +115,7 @@ export function useDashboardShipments() {
             .from('shipments')
             .select(`
               id, do_number, origin, destination, shipment_type,
-              current_status, current_location, incoterm, etd, eta,
+              current_status, incoterm, etd, eta,
               atd, ata, documentary_cutoff, booking_status, inspection_status,
               cargo_type, free_days, carrier, flight_vessel, air_waybill,
               container_number, exporter, consignee, created_at, created_by, 
@@ -157,7 +157,7 @@ export function useDashboardShipments() {
         .from('shipments')
         .select(`
           id, do_number, origin, destination, shipment_type,
-          current_status, current_location, incoterm, etd, eta,
+          current_status, incoterm, etd, eta,
           atd, ata, documentary_cutoff, booking_status, inspection_status,
           cargo_type, free_days, carrier, flight_vessel, air_waybill,
           container_number, exporter, consignee, created_at, created_by,

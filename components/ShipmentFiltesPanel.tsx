@@ -260,7 +260,6 @@ export function ShipmentFiltersPanel({
               <FilterSection title={t('dashboard.filters.operations')}>
                 <View style={[styles.filtersInputGrid, isDesktop && styles.filtersInputGridDesktop]}>
                   <FilterTextInput label={t('dashboard.filters.statusExact')} value={filters.statusText} onChangeText={(value) => onChangeFilter('statusText', value)} placeholder={t('dashboard.filters.statusPlaceholder')} />
-                  <FilterTextInput label={t('dashboard.filters.location')} value={filters.location} onChangeText={(value) => onChangeFilter('location', value)} placeholder={t('dashboard.filters.locationPlaceholder')} />
                   <FilterTextInput label={t('dashboard.filters.party')} value={filters.party} onChangeText={(value) => onChangeFilter('party', value)} placeholder={t('dashboard.filters.partyPlaceholder')} />
                   <FilterTextInput label={t('dashboard.filters.carrier')} value={filters.carrier} onChangeText={(value) => onChangeFilter('carrier', value)} placeholder={t('dashboard.filters.carrierPlaceholder')} />
                   <FilterTextInput label={t('dashboard.filters.incoterm')} value={filters.incoterm} onChangeText={(value) => onChangeFilter('incoterm', value)} placeholder={t('dashboard.filters.incotermPlaceholder')} />

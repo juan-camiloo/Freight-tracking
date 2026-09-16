@@ -43,7 +43,6 @@ type Shipment = {
   documentary_cutoff?: string | null;
   incoterm?: string;
   current_status?: string;
-  current_location?: string;
   exporter?: string;
   consignee?: string;
   air_waybill?: string;
@@ -116,7 +115,6 @@ export default function ShipmentDetail() {
   // Estado para modal de nueva observación rápida
   const [showAddObservationModal, setShowAddObservationModal] = useState(false);
   const [newObservation, setNewObservation] = useState('');
-  const [newLocation, setNewLocation] = useState('');
   const [submittingObservation, setSubmittingObservation] = useState(false);
 
   useEffect(() => {
@@ -473,12 +471,10 @@ export default function ShipmentDetail() {
 
     setSubmittingObservation(true);
     try {
-      const cleanLocation = newLocation.trim();
       const insertPayload: any = {
         shipment_id: shipment.id,
         observation: cleanObservation,
         event_type: 'status_update',
-        location: cleanLocation || null,
         updated_by: userId,
       };
 
@@ -505,7 +501,6 @@ export default function ShipmentDetail() {
 
       setUpdates((prev) => [newUpdateRecord, ...prev]);
       setNewObservation('');
-      setNewLocation('');
       setShowAddObservationModal(false);
       notification.success(t('shipmentDetail.observationAdded', { defaultValue: 'Observación agregada exitosamente' }));
     } catch (err: any) {
@@ -708,7 +703,6 @@ export default function ShipmentDetail() {
                 <InfoRow label={t('shipmentDetail.labels.inspectionStatus')} value={inspectionStatusLabel} />
               ) : null}
               <InfoRow label={t('shipmentDetail.labels.status')} value={types.getShipmentStatusLabel(shipment.current_status, t)} />
-              <InfoRow label={t('shipmentDetail.labels.location')} value={shipment.current_location || ''} />
               <InfoRow label={t('shipmentDetail.labels.exporter')} value={shipment.exporter || ''} />
               <InfoRow label={t('shipmentDetail.labels.consignee')} value={shipment.consignee || ''} />
               {shipment.air_waybill ? <InfoRow label={t('shipmentDetail.labels.awb')} value={shipment.air_waybill} /> : null}
@@ -883,17 +877,6 @@ export default function ShipmentDetail() {
                 multiline
                 numberOfLines={3}
                 autoFocus
-              />
-
-              <Text style={styles.modalFieldLabel}>
-                {t('shipmentForm.labels.currentLocation', { defaultValue: 'Ubicación (opcional)' })}
-              </Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder={t('shipmentForm.placeholders.currentLocation', { defaultValue: 'Ej: Puerto de Buenaventura' })}
-                placeholderTextColor={AUTH_COLORS.secondaryText}
-                value={newLocation}
-                onChangeText={setNewLocation}
               />
 
               <View style={styles.modalActionsRow}>
