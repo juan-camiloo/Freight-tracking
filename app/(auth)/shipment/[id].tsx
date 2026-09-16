@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,8 +25,10 @@ import {
 } from 'react-native';
 import { AUTH_COLORS, AUTH_SHADOW, AuthScreenBackground } from '../../../components/auth/AuthChrome';
 import { RouteProgress } from '../../../components/common/Progressbar';
+import { useAuthUser } from '../../../contexts/AuthUserContext';
 import { useResponsive } from '../../../hooks/useResponsive';
 import { supabase } from '../../../lib/URLs';
+import { getUserDisplayNameSync, resolveUserDisplayNames } from '../../../lib/userCache';
 import { formatDateDisplay, formatDateTimeDisplay } from '../../../utils/dateFormatting';
 type Shipment = {
   id: string;
@@ -103,11 +106,10 @@ export default function ShipmentDetail() {
   const [loading, setLoading] = useState(true);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
+  const { userId, isInternal, companyId, nickname: currentUserName, loading: authLoading } = useAuthUser();
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [deletingUpdateId, setDeletingUpdateId] = useState<string | null>(null);
   const [deletingShipment, setDeletingShipment] = useState(false);
-  const [isInternal, setIsInternal] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
   const [resolvedCreatorName, setResolvedCreatorName] = useState<string | null>(null);
   const [resolvedUpdaterName, setResolvedUpdaterName] = useState<string | null>(null);
 
@@ -118,49 +120,14 @@ export default function ShipmentDetail() {
   const [submittingObservation, setSubmittingObservation] = useState(false);
 
   useEffect(() => {
-    void loadShipmentDetails();
-  }, [id]);
+    if (!authLoading && userId && id) {
+      void loadShipmentDetails();
+    }
+  }, [id, authLoading, userId]);
 
   const loadShipmentDetails = async () => {
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.replace('/login');
-        return;
-      }
-
-      setUserId(user.id);
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_internal, company_id, status')
-        .eq('id', user.id)
-        .single();
-
-      if (profile?.status === 'inactive') {
-        await supabase.auth.signOut();
-        router.replace({ pathname: '/login', params: { reason: 'account_inactive' } } as any);
-        return;
-      }
-
-      if (profile?.company_id) {
-        const { data: comp } = await supabase
-          .from('companies')
-          .select('status')
-          .eq('id', profile.company_id)
-          .single();
-        if (comp?.status === 'inactive') {
-          await supabase.auth.signOut();
-          router.replace({ pathname: '/login', params: { reason: 'company_inactive' } } as any);
-          return;
-        }
-      }
-
-      setIsInternal(profile?.is_internal || false);
+      setLoading(true);
 
       const { data: shipmentData, error: shipmentError } = await supabase
         .from('shipments')
@@ -169,150 +136,89 @@ export default function ShipmentDetail() {
         .single();
 
       if (shipmentError) throw shipmentError;
-      if (shipmentData.status === 'inactive' && !profile?.is_internal) {
+      if (shipmentData.status === 'inactive' && !isInternal) {
         notification.error(t('shipmentDetail.notFound'));
         router.replace('/');
         return;
       }
       setShipment(shipmentData);
 
-      const auditUserIds = Array.from(
-        new Set([shipmentData.created_by, shipmentData.updated_by].filter(Boolean)),
-      );
-      if (auditUserIds.length > 0) {
-        const { data: userProfiles } = await supabase
-          .from('profiles')
-          .select('id, nickname, email')
-          .in('id', auditUserIds);
-        const map = new Map(
-          (userProfiles ?? []).map((p: any) => [
-            p.id,
-            p.nickname?.trim() || p.email?.split('@')[0]?.trim() || 'Equipo Ingelox',
-          ]),
-        );
-        const getAuthor = (uid: string | null | undefined) => {
-          if (!uid) return null;
-          const found = map.get(uid);
-          if (found && !isUuid(found)) return found;
-          return isUuid(uid) ? 'Equipo Ingelox' : uid;
-        };
-        setResolvedCreatorName(getAuthor(shipmentData.created_by));
-        setResolvedUpdaterName(getAuthor(shipmentData.updated_by));
-      }
-
-      let assignedToUser = Boolean(profile?.is_internal);
-      if (!assignedToUser) {
-        // 1. Asignación directa de perfil
-        const { data: relationData } = await supabase
-          .from('profile_shipment')
-          .select('client_id')
-          .eq('shipment_id', id)
-          .eq('client_id', user.id)
-          .maybeSingle();
-
-        if (relationData) {
-          assignedToUser = true;
-        } else if (profile?.company_id) {
-          // 2. Asignación de empresa
-          const { data: companyRelation } = await supabase
-            .from('company_shipment')
-            .select('company_id')
+      let assignedToUser = isInternal;
+      if (!assignedToUser && userId) {
+        const assignQueries = [
+          supabase
+            .from('profile_shipment')
+            .select('client_id')
             .eq('shipment_id', id)
-            .eq('company_id', profile.company_id)
-            .maybeSingle();
-
-          assignedToUser = Boolean(companyRelation);
+            .eq('client_id', userId)
+            .maybeSingle(),
+        ];
+        if (companyId) {
+          assignQueries.push(
+            supabase
+              .from('company_shipment')
+              .select('company_id')
+              .eq('shipment_id', id)
+              .eq('company_id', companyId)
+              .maybeSingle()
+          );
         }
+        const [profileRel, compRel] = await Promise.all(assignQueries);
+        assignedToUser = Boolean(profileRel?.data || compRel?.data);
       }
 
       if (assignedToUser) {
-        const { data: updatesData } = await supabase
-          .from('shipment_updates')
-          .select('*')
-          .eq('shipment_id', id)
-          .order('created_at', { ascending: false });
+        const [updatesRes, docsRes] = await Promise.all([
+          supabase
+            .from('shipment_updates')
+            .select('*')
+            .eq('shipment_id', id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('documents')
+            .select('id, shipment_id, file_name, file_size, file_path, storage_path, uploaded_by')
+            .eq('shipment_id', id)
+            .eq('is_deleted', false),
+        ]);
 
-        const rawUpdates = (updatesData ?? []).filter(
+        const rawUpdates = (updatesRes.data ?? []).filter(
           (u: any) => typeof u.observation === 'string' && u.observation.trim().length > 0,
         );
+        const docsData = docsRes.data ?? [];
 
-        if (rawUpdates.length > 0) {
-          const authorIds = Array.from(
-            new Set(rawUpdates.map((u: any) => u.updated_by).filter(Boolean)),
-          );
+        // Resolver todos los nombres de usuarios en paralelo con caché en memoria
+        const userIdsToResolve = [
+          shipmentData.created_by,
+          shipmentData.updated_by,
+          ...rawUpdates.map((u: any) => u.updated_by),
+          ...docsData.map((d: any) => d.uploaded_by),
+        ];
+        await resolveUserDisplayNames(userIdsToResolve);
 
-          if (authorIds.length > 0) {
-            const { data: authorProfiles } = await supabase
-              .from('profiles')
-              .select('id, nickname, email')
-              .in('id', authorIds);
+        setResolvedCreatorName(shipmentData.created_by ? getUserDisplayNameSync(shipmentData.created_by) : null);
+        setResolvedUpdaterName(shipmentData.updated_by ? getUserDisplayNameSync(shipmentData.updated_by) : null);
 
-            const authorMap = new Map<string, string>(
-              (authorProfiles ?? []).map((p) => [
-                p.id,
-                p.nickname?.trim() || p.email?.split('@')[0]?.trim() || 'Equipo Ingelox',
-              ]),
-            );
+        setUpdates(
+          rawUpdates.map((u: any) => ({
+            ...u,
+            observation: u.observation.trim(),
+            author_name: u.updated_by ? getUserDisplayNameSync(u.updated_by) : null,
+          }))
+        );
 
-            setUpdates(
-              rawUpdates.map((u: any) => ({
-                ...u,
-                observation: u.observation.trim(),
-                author_name: u.updated_by
-                  ? (authorMap.get(u.updated_by) ?? (isUuid(u.updated_by) ? 'Equipo Ingelox' : u.updated_by))
-                  : null,
-              })),
-            );
-          } else {
-            setUpdates(
-              rawUpdates.map((u: any) => ({
-                ...u,
-                observation: u.observation.trim(),
-                author_name: u.updated_by && isUuid(u.updated_by) ? 'Equipo Ingelox' : u.updated_by,
-              })),
-            );
-          }
-        } else {
-          setUpdates([]);
-        }
-
-        const { data: docsData } = await supabase
-          .from('documents')
-          .select('id, shipment_id, file_name, file_size, file_path, storage_path, uploaded_by')
-          .eq('shipment_id', id);
-
-        if (docsData && docsData.length > 0) {
-          const uploaderIds = Array.from(
-            new Set(docsData.map((d: any) => d.uploaded_by).filter(Boolean)),
-          );
-
-          if (uploaderIds.length > 0) {
-            const { data: uploaderProfiles } = await supabase
-              .from('profiles')
-              .select('id, nickname, email')
-              .in('id', uploaderIds);
-
-            const uploaderMap = new Map<string, string>(
-              (uploaderProfiles ?? []).map((p) => [
-                p.id,
-                p.nickname?.trim() || p.email?.split('@')[0]?.trim() || 'Equipo Ingelox',
-              ]),
-            );
-
-            setDocuments(
-              docsData.map((d: any) => ({
-                ...d,
-                uploader_name: d.uploaded_by
-                  ? (uploaderMap.get(d.uploaded_by) ?? (isUuid(d.uploaded_by) ? 'Equipo Ingelox' : d.uploaded_by))
-                  : null,
-              })),
-            );
-          } else {
-            setDocuments(docsData);
-          }
-        } else {
-          setDocuments([]);
-        }
+        setDocuments(
+          docsData.map((d: any) => ({
+            ...d,
+            uploader_name: d.uploaded_by ? getUserDisplayNameSync(d.uploaded_by) : null,
+          }))
+        );
+      } else {
+        const userIdsToResolve = [shipmentData.created_by, shipmentData.updated_by];
+        await resolveUserDisplayNames(userIdsToResolve);
+        setResolvedCreatorName(shipmentData.created_by ? getUserDisplayNameSync(shipmentData.created_by) : null);
+        setResolvedUpdaterName(shipmentData.updated_by ? getUserDisplayNameSync(shipmentData.updated_by) : null);
+        setUpdates([]);
+        setDocuments([]);
       }
     } catch {
       notification.error(t('shipmentDetail.loadError'));
@@ -388,16 +294,28 @@ export default function ShipmentDetail() {
       }
 
       const asset = picker.assets[0];
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
+
+      if (asset.size && asset.size > 20 * 1024 * 1024) {
+        notification.error(t('shipmentDetail.fileTooLarge', { defaultValue: 'El archivo supera el tamaño máximo recomendado de 20 MB.' }));
+        return;
+      }
+
+      // En web pasar directamente el objeto File nativo si existe, evitando fetch y clonación de blob
+      let uploadPayload: Blob | File;
+      if (Platform.OS === 'web' && (asset as any).file) {
+        uploadPayload = (asset as any).file;
+      } else {
+        const response = await fetch(asset.uri);
+        uploadPayload = await response.blob();
+      }
 
       const safeName = (asset.name || t('shipmentDetail.defaultDocumentName')).replace(/[^a-zA-Z0-9._-]/g, '_');
       const objectPath = `${shipmentId}/${Date.now()}_${safeName}`;
 
       const { data: uploaded, error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(objectPath, blob, {
-          contentType: asset.mimeType || 'application/octet-stream',
+        .upload(objectPath, uploadPayload, {
+          contentType: asset.mimeType || 'application/pdf',
           upsert: false,
         });
 
@@ -573,17 +491,7 @@ export default function ShipmentDetail() {
       if (error) throw error;
 
       // Resolver nombre de autor para renderizado inmediato
-      let authorName = 'Equipo Ingelox';
-      if (userId) {
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('nickname, email')
-          .eq('id', userId)
-          .single();
-        if (userProfile) {
-          authorName = userProfile.nickname?.trim() || userProfile.email?.split('@')[0]?.trim() || 'Equipo Ingelox';
-        }
-      }
+      const authorName = currentUserName || 'Equipo Ingelox';
 
       const newUpdateRecord: ShipmentUpdate = {
         id: data.id,

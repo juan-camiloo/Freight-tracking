@@ -27,7 +27,7 @@ import {
 import { AUTH_MOBILE_DOCK_PADDING, toggleLanguage } from '../../../components/auth/AuthNavigation';
 import Header from '../../../components/Header';
 import { useNativeNotification } from '../../../components/ui/NativeNotification';
-import { useDashboardShipments } from '../../../hooks/useDashboardShipments';
+import { useAuthUser } from '../../../contexts/AuthUserContext';
 import { useResponsive } from '../../../hooks/useResponsive';
 import { notifyShipmentEvent } from '../../../lib/shipmentNotifications';
 import * as types from '../../../lib/shipmentType';
@@ -40,7 +40,7 @@ const DATE_TIME_FIELDS: DateFieldName[] = ['atd', 'ata', 'documentaryCutoff'];
 
 const isDateTimeField = (field?: DateFieldName | null) => Boolean(field && DATE_TIME_FIELDS.includes(field));
 
-export default function EditShipment() {
+export default function EditShipmentScreen() {
   const { t } = useTranslation();
   const notification = useNativeNotification();
   const { id } = useLocalSearchParams();
@@ -83,7 +83,7 @@ export default function EditShipment() {
   const [androidTimeField, setAndroidTimeField] = useState<DateFieldName | null>(null);
   const [dateDraft, setDateDraft] = useState(new Date());
 
-  const { userId } = useDashboardShipments();
+  const { userId } = useAuthUser();
   const resolveOptions = (options: { labelKey: string; value: string }[]) =>
     options.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
@@ -123,13 +123,18 @@ export default function EditShipment() {
 
   const loadShipment = async () => {
     try {
-      const { data, error } = await supabase
-        .from('shipments')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const [shipmentRes, docsRes] = await Promise.all([
+        supabase.from('shipments').select('*').eq('id', id).single(),
+        supabase
+          .from('documents')
+          .select('*')
+          .eq('shipment_id', id)
+          .or('is_deleted.eq.false,is_deleted.is.null')
+          .order('created_at', { ascending: false }),
+      ]);
 
-      if (error) throw error;
+      if (shipmentRes.error) throw shipmentRes.error;
+      const data = shipmentRes.data;
 
       setDoNumber(data.do_number || '');
       setShipmentType(types.normalizeShipmentType(data.shipment_type));
@@ -155,13 +160,7 @@ export default function EditShipment() {
       setCarrier(data.carrier || '');
       setClientId(data.client_id || '');
 
-      const { data: docsData } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('shipment_id', id)
-        .or('is_deleted.eq.false,is_deleted.is.null')
-        .order('created_at', { ascending: false });
-      setDocuments((docsData as types.DocumentRecord[]) ?? []);
+      setDocuments((docsRes.data as types.DocumentRecord[]) ?? []);
     } catch {
       notification.error(t('editShipment.loadError'));
     } finally {
@@ -244,11 +243,13 @@ export default function EditShipment() {
         }
       }
 
-      await notifyShipmentEvent({
+      void notifyShipmentEvent({
         eventType: 'updated',
         shipmentId: String(id ?? ''),
         doNumber,
         status: currentStatus,
+      }).catch((notifyErr) => {
+        console.warn('Error enviando notificación en background:', notifyErr);
       });
 
       notification.success(t('editShipment.updatedOk'));
@@ -325,17 +326,28 @@ export default function EditShipment() {
       if (result.canceled || !result.assets?.length) return;
 
       const asset = result.assets[0];
+
+      if (asset.size && asset.size > 20 * 1024 * 1024) {
+        notification.error(t('shipmentDetail.fileTooLarge', { defaultValue: 'El archivo supera el tamaño máximo recomendado de 20 MB.' }));
+        return;
+      }
+
       setUploadingDocument(true);
 
       const safeName = asset.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const storagePath = `${shipmentId}/${Date.now()}_${safeName}`;
 
-      const res = await fetch(asset.uri);
-      const blob = await res.blob();
+      let uploadPayload: Blob | File;
+      if (Platform.OS === 'web' && (asset as any).file) {
+        uploadPayload = (asset as any).file;
+      } else {
+        const res = await fetch(asset.uri);
+        uploadPayload = await res.blob();
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(storagePath, blob, {
+        .upload(storagePath, uploadPayload, {
           contentType: asset.mimeType || 'application/pdf',
           upsert: false,
         });

@@ -39,7 +39,7 @@ export default function CreateNews() {
         if (router.canGoBack()) {
             router.back();
         } else {
-            router.replace('/newsMobile');
+            router.replace('/newsMobile' as any);
         }
     };
 
@@ -127,7 +127,7 @@ export default function CreateNews() {
                 }
             }
 
-            router.replace('/newsMobile');
+            router.replace('/newsMobile' as any);
         } catch (error) {
             console.error('Error creating news:', error);
             Alert.alert(

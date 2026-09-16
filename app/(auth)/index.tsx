@@ -35,6 +35,7 @@ import {
   type DashboardUpdate,
 } from '../../hooks/useSelectedShipmentDocuments';
 import { useShipmentFilters } from '../../hooks/useShipmentFilters';
+import { useAuthUser } from '../../contexts/AuthUserContext';
 import { useWebNotifications } from '../../hooks/useWebNotifications';
 import { supabase } from '../../lib/URLs';
 
@@ -42,6 +43,7 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const { isDesktop, height } = useResponsive();
   const carouselRef = useRef<ScrollView>(null);
+  const { companyId } = useAuthUser();
 
   const {
     searchQuery,
@@ -78,6 +80,7 @@ export default function Dashboard() {
     selectedShipmentId,
     isInternal,
     userId,
+    companyId,
   });
 
   const { webNotificationPermission, handleEnableWebNotifications } = useWebNotifications();

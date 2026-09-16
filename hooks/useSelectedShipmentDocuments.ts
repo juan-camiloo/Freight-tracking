@@ -1,5 +1,6 @@
 import { DocumentRecord } from '@/lib/shipmentType';
 import { supabase } from '@/lib/URLs';
+import { resolveUserDisplayNames, getUserDisplayNameSync } from '@/lib/userCache';
 import { isAbortError } from '@/utils/errorHandling';
 import { useEffect, useState } from 'react';
 
@@ -12,19 +13,16 @@ export type DashboardUpdate = {
   author_name?: string | null;
 };
 
-const isUuid = (val: string | null | undefined): boolean => {
-  if (!val) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
-};
-
 export const useSelectedShipmentDocuments = ({
   selectedShipmentId,
   userId,
   isInternal,
+  companyId,
 }: {
   selectedShipmentId: string | null;
   userId: string | null;
   isInternal: boolean;
+  companyId?: string | null;
 }) => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [updates, setUpdates] = useState<DashboardUpdate[]>([]);
@@ -55,24 +53,16 @@ export const useSelectedShipmentDocuments = ({
 
           if (relationData) {
             canViewExtras = true;
-          } else {
-            // 2. Company assignment (company_shipment)
-            const { data: userProfile } = await supabase
-              .from('profiles')
+          } else if (companyId) {
+            // 2. Company assignment (company_shipment) sin consultar profiles de nuevo
+            const { data: companyRelation } = await supabase
+              .from('company_shipment')
               .select('company_id')
-              .eq('id', userId)
+              .eq('shipment_id', selectedShipmentId)
+              .eq('company_id', companyId)
               .maybeSingle();
 
-            if (userProfile?.company_id) {
-              const { data: companyRelation } = await supabase
-                .from('company_shipment')
-                .select('company_id')
-                .eq('shipment_id', selectedShipmentId)
-                .eq('company_id', userProfile.company_id)
-                .maybeSingle();
-
-              canViewExtras = Boolean(companyRelation);
-            }
+            canViewExtras = Boolean(companyRelation);
           }
         }
 
@@ -88,7 +78,8 @@ export const useSelectedShipmentDocuments = ({
           supabase
             .from('documents')
             .select('id, shipment_id, file_name, file_size, file_path, storage_path')
-            .eq('shipment_id', selectedShipmentId),
+            .eq('shipment_id', selectedShipmentId)
+            .eq('is_deleted', false),
           supabase
             .from('shipment_updates')
             .select('id, created_at, status, location, observation, updated_by')
@@ -112,19 +103,8 @@ export const useSelectedShipmentDocuments = ({
             new Set(rawUpdates.map((u: any) => u.updated_by).filter(Boolean)),
           );
 
-          let authorMap = new Map<string, string>();
           if (authorIds.length > 0) {
-            const { data: authorProfiles } = await supabase
-              .from('profiles')
-              .select('id, nickname, email')
-              .in('id', authorIds);
-
-            authorMap = new Map<string, string>(
-              (authorProfiles ?? []).map((p) => [
-                p.id,
-                p.nickname?.trim() || p.email?.split('@')[0]?.trim() || 'Equipo Ingelox',
-              ]),
-            );
+            await resolveUserDisplayNames(authorIds);
           }
 
           if (!cancelled) {
@@ -135,9 +115,7 @@ export const useSelectedShipmentDocuments = ({
                 status: u.status,
                 location: u.location,
                 observation: u.observation.trim(),
-                author_name: u.updated_by
-                  ? (authorMap.get(u.updated_by) ?? (isUuid(u.updated_by) ? 'Equipo Ingelox' : u.updated_by))
-                  : null,
+                author_name: u.updated_by ? getUserDisplayNameSync(u.updated_by) : null,
               })),
             );
           }
