@@ -130,14 +130,17 @@ export const AuthUserProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user?.id) {
         setUser(session.user);
         void registerCurrentDevicePushToken(session.user.id);
-        const prof = await verifyUserStatus(session.user.id);
-        if (mounted && prof) setProfile(prof);
+        setTimeout(() => {
+          void verifyUserStatus(session.user.id).then((prof) => {
+            if (mounted && prof) setProfile(prof);
+          });
+        }, 0);
       }
 
       if (event === 'SIGNED_OUT' && !session) {

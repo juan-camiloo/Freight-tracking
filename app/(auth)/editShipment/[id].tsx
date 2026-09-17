@@ -40,10 +40,34 @@ const DATE_TIME_FIELDS: DateFieldName[] = ['atd', 'ata', 'documentaryCutoff'];
 
 const isDateTimeField = (field?: DateFieldName | null) => Boolean(field && DATE_TIME_FIELDS.includes(field));
 
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = 15000, errorMsg = 'Operación agotó el tiempo de espera'): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMsg)), timeoutMs)),
+  ]);
+}
+
+function getErrorMessage(err: any, fallback: string): string {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  if (err.message && typeof err.message === 'string') {
+    if (err.details && typeof err.details === 'string') {
+      return `${err.message}: ${err.details}`;
+    }
+    return err.message;
+  }
+  if (err.error_description && typeof err.error_description === 'string') {
+    return err.error_description;
+  }
+  return fallback;
+}
+
 export default function EditShipmentScreen() {
   const { t } = useTranslation();
   const notification = useNativeNotification();
   const { id } = useLocalSearchParams();
+  const rawId = Array.isArray(id) ? id[0] : id;
+  const shipmentId = typeof rawId === 'string' ? rawId.trim() : '';
   const { height, isDesktop } = useResponsive();
 
   const [loading, setLoading] = useState(true);
@@ -118,18 +142,30 @@ export default function EditShipmentScreen() {
 
   useEffect(() => {
     void loadShipment();
-  }, [id]);
+  }, [shipmentId]);
 
   const loadShipment = async () => {
+    if (!shipmentId) {
+      notification.error(t('editShipment.invalidShipmentId'));
+      setLoading(false);
+      return;
+    }
     try {
       const [shipmentRes, docsRes] = await Promise.all([
-        supabase.from('shipments').select('*').eq('id', id).single(),
-        supabase
-          .from('documents')
-          .select('*')
-          .eq('shipment_id', id)
-          .or('is_deleted.eq.false,is_deleted.is.null')
-          .order('created_at', { ascending: false }),
+        withTimeout(
+          supabase.from('shipments').select('*').eq('id', shipmentId).single(),
+          15000,
+          t('editShipment.loadTimeout', { defaultValue: 'Tiempo de espera agotado al cargar la carga.' })
+        ),
+        withTimeout(
+          supabase
+            .from('documents')
+            .select('*')
+            .eq('shipment_id', shipmentId)
+            .or('is_deleted.eq.false,is_deleted.is.null')
+            .order('created_at', { ascending: false }),
+          15000
+        ),
       ]);
 
       if (shipmentRes.error) throw shipmentRes.error;
@@ -159,14 +195,20 @@ export default function EditShipmentScreen() {
       setClientId(data.client_id || '');
 
       setDocuments((docsRes.data as types.DocumentRecord[]) ?? []);
-    } catch {
-      notification.error(t('editShipment.loadError'));
+    } catch (error: any) {
+      console.error('Error loading shipment:', error);
+      notification.error(getErrorMessage(error, t('editShipment.loadError')));
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async () => {
+    if (!shipmentId) {
+      notification.error(t('editShipment.invalidShipmentId'));
+      return;
+    }
+
     if (!doNumber || !origin || !destination) {
       notification.error(t('editShipment.doRequiredError'));
       return;
@@ -197,42 +239,71 @@ export default function EditShipmentScreen() {
         return trimmed.length > 0 ? trimmed : null;
       };
 
-      const { error: updateError } = await supabase
-        .from('shipments')
-        .update({
-          do_number: cleanString(doNumber) || doNumber,
-          shipment_type: cleanString(shipmentType),
-          current_status: cleanString(currentStatus),
-          exporter: cleanString(exporter),
-          consignee: cleanString(consignee),
-          origin: cleanString(origin),
-          destination: cleanString(destination),
-          etd: etd || null,
-          eta: eta || null,
-          atd: atd || null,
-          ata: ata || null,
-          documentary_cutoff: documentaryCutoff || null,
-          incoterm: cleanString(incoterm),
-          cargo_type: cleanString(cargoType),
-          free_days: freeDays ? Number(freeDays) : null,
-          booking_status: cleanString(bookingStatus),
-          inspection_status: cleanString(inspectionStatus),
-          air_waybill: cleanString(airWaybill),
-          flight_vessel: cleanString(flightVessel),
-          container_number: cleanString(containerNumber),
-          carrier: cleanString(carrier),
-          updated_by: userId,
-        })
-        .eq('id', id);
+      let effectiveUserId = (userId && typeof userId === 'string' && userId.trim()) ? userId.trim() : null;
+      if (!effectiveUserId) {
+        try {
+          const { data: sessionData } = await withTimeout(supabase.auth.getSession(), 4000);
+          effectiveUserId = sessionData.session?.user?.id ?? null;
+        } catch {
+          effectiveUserId = null;
+        }
+      }
+
+      const updatePayload: Record<string, any> = {
+        do_number: cleanString(doNumber) || doNumber,
+        shipment_type: cleanString(shipmentType),
+        current_status: cleanString(currentStatus),
+        exporter: cleanString(exporter),
+        consignee: cleanString(consignee),
+        origin: cleanString(origin),
+        destination: cleanString(destination),
+        etd: etd || null,
+        eta: eta || null,
+        atd: atd || null,
+        ata: ata || null,
+        documentary_cutoff: documentaryCutoff || null,
+        incoterm: cleanString(incoterm),
+        cargo_type: cleanString(cargoType) || '',
+        free_days: freeDays ? Number(freeDays) : null,
+        booking_status: cleanString(bookingStatus) || 'pending',
+        inspection_status: cleanString(inspectionStatus) || 'none',
+        air_waybill: cleanString(airWaybill),
+        flight_vessel: cleanString(flightVessel),
+        container_number: cleanString(containerNumber),
+        carrier: cleanString(carrier),
+      };
+
+      if (effectiveUserId) {
+        updatePayload.updated_by = effectiveUserId;
+      }
+
+      const { error: updateError } = await withTimeout(
+        supabase
+          .from('shipments')
+          .update(updatePayload)
+          .eq('id', shipmentId),
+        15000,
+        t('editShipment.timeoutError', { defaultValue: 'La operación de guardado agotó el tiempo de espera. Por favor intenta de nuevo.' })
+      );
 
       if (updateError) throw updateError;
 
       const cleanObs = cleanString(observation);
       if (cleanObs) {
-        const { error: updateLogError } = await supabase.from('shipment_updates').insert({
-          shipment_id: id,
+        const updateLogPayload: Record<string, any> = {
+          shipment_id: shipmentId,
           observation: cleanObs,
-          updated_by: userId,
+        };
+        if (effectiveUserId) {
+          updateLogPayload.updated_by = effectiveUserId;
+        }
+
+        const { error: updateLogError } = await withTimeout(
+          supabase.from('shipment_updates').insert(updateLogPayload),
+          10000
+        ).catch((logErr) => {
+          console.warn('Update log error:', logErr);
+          return { error: logErr };
         });
 
         if (updateLogError) {
@@ -242,7 +313,7 @@ export default function EditShipmentScreen() {
 
       void notifyShipmentEvent({
         eventType: 'updated',
-        shipmentId: String(id ?? ''),
+        shipmentId,
         doNumber,
         status: currentStatus,
       }).catch((notifyErr) => {
@@ -251,12 +322,10 @@ export default function EditShipmentScreen() {
 
       notification.success(t('editShipment.updatedOk'));
       router.replace('/');
-    } catch (error) {
-      if (error instanceof Error) {
-        notification.error(error.message);
-      } else {
-        notification.error(t('editShipment.unknownError'));
-      }
+    } catch (error: any) {
+      console.error('Error saving shipment:', error);
+      const msg = getErrorMessage(error, t('editShipment.unknownError'));
+      notification.error(msg);
     } finally {
       setSaving(false);
     }
@@ -277,7 +346,6 @@ export default function EditShipmentScreen() {
   };
 
   const confirmDelete = async () => {
-    const shipmentId = String(id ?? '');
     if (!shipmentId) {
       notification.error(t('editShipment.invalidShipmentId'));
       return;
@@ -285,10 +353,13 @@ export default function EditShipmentScreen() {
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('shipments')
-        .update({ status: 'inactive' })
-        .eq('id', shipmentId);
+      const { error } = await withTimeout(
+        supabase
+          .from('shipments')
+          .update({ status: 'inactive' })
+          .eq('id', shipmentId),
+        15000
+      );
       if (error) throw error;
 
       await notifyShipmentEvent({
@@ -300,19 +371,16 @@ export default function EditShipmentScreen() {
 
       notification.success(t('editShipment.deleteOk'));
       router.replace('/');
-    } catch (error) {
-      if (error instanceof Error) {
-        notification.error(error.message);
-      } else {
-        notification.error(t('editShipment.deleteError'));
-      }
+    } catch (error: any) {
+      console.error('Error deleting shipment:', error);
+      const msg = getErrorMessage(error, t('editShipment.deleteError'));
+      notification.error(msg);
     } finally {
       setSaving(false);
     }
   };
 
   const handleUploadDocument = async () => {
-    const shipmentId = String(id ?? '');
     if (!shipmentId) return;
     try {
       const result = await DocumentPicker.getDocumentAsync({

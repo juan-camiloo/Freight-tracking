@@ -26,7 +26,10 @@ const supabaseOptions = {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
-    flowType: 'pkce' as const
+    flowType: 'pkce' as const,
+    lock: Platform.OS === 'web'
+      ? async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => await fn()
+      : undefined,
   },
 }
 
