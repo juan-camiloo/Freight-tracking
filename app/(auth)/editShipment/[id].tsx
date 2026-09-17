@@ -32,7 +32,16 @@ import { useResponsive } from '../../../hooks/useResponsive';
 import { notifyShipmentEvent } from '../../../lib/shipmentNotifications';
 import * as types from '../../../lib/shipmentType';
 import { supabase } from '../../../lib/URLs';
-import { formatDateInputValue, formatDateTimeInputValue, mergeDateAndTime, parseDateInputValue } from '../../../utils/dateFormatting';
+import {
+  formatDateInputValue,
+  formatDateTimeInputValue,
+  formatIsoToLocalDateInput,
+  formatIsoToLocalDateTimeInput,
+  mergeDateAndTime,
+  parseDateInputValue,
+  serializeDateForDb,
+  serializeDateTimeForDb,
+} from '../../../utils/dateFormatting';
 
 type DateFieldName = 'etd' | 'eta' | 'atd' | 'ata' | 'documentaryCutoff';
 
@@ -178,11 +187,11 @@ export default function EditShipmentScreen() {
       setConsignee(data.consignee || '');
       setOrigin(data.origin || '');
       setDestination(data.destination || '');
-      setEtd(data.etd || '');
-      setEta(data.eta || '');
-      setAtd(data.atd || '');
-      setAta(data.ata || '');
-      setDocumentaryCutoff(data.documentary_cutoff || '');
+      setEtd(formatIsoToLocalDateInput(data.etd));
+      setEta(formatIsoToLocalDateInput(data.eta));
+      setAtd(formatIsoToLocalDateTimeInput(data.atd));
+      setAta(formatIsoToLocalDateTimeInput(data.ata));
+      setDocumentaryCutoff(formatIsoToLocalDateTimeInput(data.documentary_cutoff));
       setIncoterm(data.incoterm || '');
       setCargoType(data.cargo_type || '');
       setFreeDays(data.free_days !== null && data.free_days !== undefined ? String(data.free_days) : '');
@@ -257,11 +266,11 @@ export default function EditShipmentScreen() {
         consignee: cleanString(consignee),
         origin: cleanString(origin),
         destination: cleanString(destination),
-        etd: etd || null,
-        eta: eta || null,
-        atd: atd || null,
-        ata: ata || null,
-        documentary_cutoff: documentaryCutoff || null,
+        etd: serializeDateForDb(etd),
+        eta: serializeDateForDb(eta),
+        atd: serializeDateTimeForDb(atd),
+        ata: serializeDateTimeForDb(ata),
+        documentary_cutoff: serializeDateTimeForDb(documentaryCutoff),
         incoterm: cleanString(incoterm),
         cargo_type: cleanString(cargoType) || '',
         free_days: freeDays ? Number(freeDays) : null,
@@ -978,12 +987,8 @@ const webDateInputStyle: CSSProperties = {
 
 const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
   if (!value) return '';
-  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  if (mode === 'date') return normalized.length >= 10 ? normalized.slice(0, 10) : normalized;
-  const localDateTime = normalized.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
-  if (localDateTime) return localDateTime;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? normalized : formatDateTimeInputValue(parsed).replace(' ', 'T');
+  if (mode === 'date') return formatIsoToLocalDateInput(value);
+  return formatIsoToLocalDateTimeInput(value).replace(' ', 'T');
 };
 
 const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {

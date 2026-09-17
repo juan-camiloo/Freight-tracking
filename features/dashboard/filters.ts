@@ -11,6 +11,7 @@ import {
   type SortField,
   type StatusGroupFilter,
 } from '@/lib/shipmentType';
+import { parseDateSafe } from '@/utils/dateFormatting';
 
 export const DEFAULT_FILTERS: ShipmentFilters = {
   shipmentType: 'all',
@@ -144,8 +145,8 @@ export function matchesMilestone(shipment: ShipmentListItem, filter: MilestoneFi
   if (filter === 'withAtd') return Boolean(shipment.atd);
   if (filter === 'withAta') return Boolean(shipment.ata);
   if (filter === 'overdueEta') {
-    const etaTime = getDateTime(shipment.eta);
-    return etaTime !== null && etaTime < Date.now() && !shipment.ata;
+    const etaBoundary = getBoundaryDateTime(shipment.eta, true);
+    return etaBoundary !== null && etaBoundary < Date.now() && !shipment.ata;
   }
   return true;
 }
@@ -264,19 +265,28 @@ export function parseOptionalNumber(value: string) {
 
 export function getDateTime(value: string | null | undefined) {
   if (!value) return null;
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? null : time;
+  const parsed = parseDateSafe(value);
+  return parsed ? parsed.getTime() : null;
 }
 
-export function getBoundaryDateTime(value: string, endOfDay = false) {
-  if (!value.trim()) return null;
-  const normalizedValue = value.trim();
-  const time = Date.parse(
-    /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)
-      ? `${normalizedValue}T${endOfDay ? '23:59:59' : '00:00:00'}`
-      : normalizedValue,
-  );
-  return Number.isNaN(time) ? null : time;
+export function getBoundaryDateTime(value: string | null | undefined, endOfDay = false) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    const y = Number(dateMatch[1]);
+    const m = Number(dateMatch[2]) - 1;
+    const d = Number(dateMatch[3]);
+    const boundary = endOfDay
+      ? new Date(y, m, d, 23, 59, 59, 999)
+      : new Date(y, m, d, 0, 0, 0, 0);
+    return boundary.getTime();
+  }
+
+  const parsed = parseDateSafe(trimmed);
+  return parsed ? parsed.getTime() : null;
 }
 
 export function isWithinDateRange(value: string | null | undefined, from: string, to: string) {

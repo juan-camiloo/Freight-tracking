@@ -540,10 +540,9 @@ export default function ShipmentDetail() {
     Boolean(update.observation && update.observation.trim().length > 0),
   );
 
+  const locale = i18n.language === 'es' ? 'es-CO' : 'en-US';
   const documentaryCutoff = shipment.documentary_cutoff
-    ? Number.isNaN(Date.parse(shipment.documentary_cutoff))
-      ? shipment.documentary_cutoff
-      : new Date(shipment.documentary_cutoff).toLocaleString()
+    ? formatDateTimeDisplay(shipment.documentary_cutoff, locale)
     : '';
 
   const bookingStatusValue = shipment.booking_status?.toLowerCase() ?? '';
@@ -566,7 +565,6 @@ export default function ShipmentDetail() {
     ? t(`shipmentForm.options.cargoType.${cargoTypeValue}`)
     : '';
   const statusTone = getStatusTone(shipment.current_status);
-  const locale = i18n.language === 'es' ? 'es-CO' : 'en-US';
   const heroAudit = resolvedUpdaterName
     ? `${t('shipmentDetail.updatedBy')} ${sanitizeAuthor(resolvedUpdaterName)}${shipment.updated_at ? ` · ${formatDateDisplay(shipment.updated_at, locale)}` : ''}`
     : resolvedCreatorName || shipment.created_by
@@ -635,11 +633,11 @@ export default function ShipmentDetail() {
             <View style={styles.routeLabels}>
               <View>
                 <Text style={styles.routeCode}>{shipment.origin}</Text>
-                <Text style={styles.routeDate}>{formatDateDisplay(shipment.atd ?? shipment.etd, i18n.language === 'es' ? 'es-CO' : 'en-US')}</Text>
+                <Text style={styles.routeDate}>{formatDateDisplay(shipment.atd ?? shipment.etd, locale)}</Text>
               </View>
               <View style={styles.routeEndBlock}>
                 <Text style={styles.routeCode}>{shipment.destination}</Text>
-                <Text style={styles.routeDate}>{formatDateDisplay(shipment.ata ?? shipment.eta, i18n.language === 'es' ? 'es-CO' : 'en-US')}</Text>
+                <Text style={styles.routeDate}>{formatDateDisplay(shipment.ata ?? shipment.eta, locale)}</Text>
               </View>
             </View>
             <RouteProgress toneColor={statusTone.progress} shipment={shipment} />
@@ -680,13 +678,13 @@ export default function ShipmentDetail() {
               <InfoRow label={t('shipmentDetail.labels.via')} value={shipmentTypeLabel} />
               <InfoRow label={t('shipmentDetail.labels.origin')} value={shipment.origin} />
               <InfoRow label={t('shipmentDetail.labels.destination')} value={shipment.destination} />
-              <InfoRow label={t('shipmentDetail.labels.etd')} value={shipment.etd || ''} />
+              <InfoRow label={t('shipmentDetail.labels.etd')} value={shipment.etd ? formatDateDisplay(shipment.etd, locale) : ''} />
               {shipment.atd ? (
-                <InfoRow label={t('shipmentDetail.labels.atd')} value={formatDateTimeDisplay(shipment.atd, i18n.language === 'es' ? 'es-CO' : 'en-US')} />
+                <InfoRow label={t('shipmentDetail.labels.atd')} value={formatDateTimeDisplay(shipment.atd, locale)} />
               ) : null}
-              <InfoRow label={t('shipmentDetail.labels.eta')} value={shipment.eta || ''} />
+              <InfoRow label={t('shipmentDetail.labels.eta')} value={shipment.eta ? formatDateDisplay(shipment.eta, locale) : ''} />
               {shipment.ata ? (
-                <InfoRow label={t('shipmentDetail.labels.ata')} value={formatDateTimeDisplay(shipment.ata, i18n.language === 'es' ? 'es-CO' : 'en-US')} />
+                <InfoRow label={t('shipmentDetail.labels.ata')} value={formatDateTimeDisplay(shipment.ata, locale)} />
               ) : null}
               {documentaryCutoff ? (
                 <InfoRow label={t('shipmentDetail.labels.documentaryCutoff')} value={documentaryCutoff} />

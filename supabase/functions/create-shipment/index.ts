@@ -21,6 +21,33 @@ const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+function normalizeDateForDb(val: unknown): string | null {
+  if (!val || typeof val !== "string") return null;
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function normalizeDateTimeForDb(val: unknown): string | null {
+  if (!val || typeof val !== "string") return null;
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+  if (/[Zz]|[+-]\d{2}(?::?\d{2})?$/.test(trimmed)) {
+    return trimmed;
+  }
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (match) {
+    const sec = match[6] ? match[6] : "00";
+    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${sec}-05:00`;
+  }
+  const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    return `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T00:00:00-05:00`;
+  }
+  return trimmed;
+}
+
 serve(async (req) => {
   console.log('Funcion ejecutada, method:', req.method);
   if (req.method === "OPTIONS") {
@@ -170,11 +197,11 @@ serve(async (req) => {
         shipment_type: body.shipment_type ?? null,
         origin: body.origin,
         destination: body.destination,
-        etd: body.etd ?? null,
-        eta: body.eta ?? null,
-        atd: body.atd ?? null,
-        ata: body.ata ?? null,
-        documentary_cutoff: body.documentary_cutoff ?? null,
+        etd: normalizeDateForDb(body.etd),
+        eta: normalizeDateForDb(body.eta),
+        atd: normalizeDateTimeForDb(body.atd),
+        ata: normalizeDateTimeForDb(body.ata),
+        documentary_cutoff: normalizeDateTimeForDb(body.documentary_cutoff),
         incoterm: body.incoterm ?? null,
         ...optionalStatus,
         ...optionalBookingStatus,

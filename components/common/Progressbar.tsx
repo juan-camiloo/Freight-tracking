@@ -1,6 +1,6 @@
 import i18n from '@/i18n';
 import * as types from '@/lib/shipmentType';
-import { formatDateDisplay } from '@/utils/dateFormatting';
+import { formatDateDisplay, parseDateSafe } from '@/utils/dateFormatting';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { ShipmentTransportIcon } from '../../components/auth/ShipmentTransportIcon';
@@ -78,7 +78,7 @@ function getShipmentProgress(
 
   // 1. Caso de retraso o carga detenida
   if (STALLED_STATUSES.has(normalizedStatus) || normalizedStatus.includes('retras')) {
-    const frozenAt = latestStatusAt ? new Date(latestStatusAt).getTime() : Date.now();
+    const frozenAt = latestStatusAt ? (parseDateSafe(latestStatusAt)?.getTime() ?? Date.now()) : Date.now();
     const frozenProgress = interpolateTransit(etd, eta, atd, ata, frozenAt);
     return { value: frozenProgress, stalled: true };
   }
@@ -122,10 +122,10 @@ function interpolateTransit(
 ): number {
   const { min, max } = SECTIONS.transit;
 
-  const ETD = etd ? new Date(etd).getTime() : null;
-  const ETA = eta ? new Date(eta).getTime() : null;
-  const ATD = atd ? new Date(atd).getTime() : null;
-  const ATA = ata ? new Date(ata).getTime() : null;
+  const ETD = etd ? parseDateSafe(etd)?.getTime() ?? null : null;
+  const ETA = eta ? parseDateSafe(eta)?.getTime() ?? null : null;
+  const ATD = atd ? parseDateSafe(atd)?.getTime() ?? null : null;
+  const ATA = ata ? parseDateSafe(ata)?.getTime() ?? null : null;
 
   const departure = ATD ?? ETD;
   if (!departure || !ETA) return 0.50; // Fallback punto medio de tránsito si no hay fechas

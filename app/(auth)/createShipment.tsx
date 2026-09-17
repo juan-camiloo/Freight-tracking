@@ -39,8 +39,12 @@ import { createShipmentFunctionUrl, supabase, supabaseAnonKey } from '../../lib/
 import {
   formatDateInputValue,
   formatDateTimeInputValue,
+  formatIsoToLocalDateInput,
+  formatIsoToLocalDateTimeInput,
   mergeDateAndTime,
   parseDateInputValue,
+  serializeDateForDb,
+  serializeDateTimeForDb,
 } from '../../utils/dateFormatting';
 import { resolveErrorMessage as resolveErrorMessageUtil } from '../../utils/errorHandling';
 
@@ -252,11 +256,11 @@ export default function CreateShipment() {
           shipment_type: cleanString(shipmentType),
           origin: cleanString(origin),
           destination: cleanString(destination),
-          etd: etd || null,
-          eta: eta || null,
-          atd: atd || null,
-          ata: ata || null,
-          documentary_cutoff: documentaryCutoff || null,
+          etd: serializeDateForDb(etd),
+          eta: serializeDateForDb(eta),
+          atd: serializeDateTimeForDb(atd),
+          ata: serializeDateTimeForDb(ata),
+          documentary_cutoff: serializeDateTimeForDb(documentaryCutoff),
           incoterm: cleanString(incoterm),
           cargo_type: cleanString(cargoType),
           free_days: freeDays ? Number(freeDays) : null,
@@ -614,12 +618,8 @@ const webDateInputStyle: CSSProperties = {
 
 const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
   if (!value) return '';
-  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  if (mode === 'date') return normalized.length >= 10 ? normalized.slice(0, 10) : normalized;
-  const localDateTime = normalized.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
-  if (localDateTime) return localDateTime;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? normalized : formatDateTimeInputValue(parsed).replace(' ', 'T');
+  if (mode === 'date') return formatIsoToLocalDateInput(value);
+  return formatIsoToLocalDateTimeInput(value).replace(' ', 'T');
 };
 
 const fromWebDateValue = (value: string, mode: 'date' | 'datetime') => {
