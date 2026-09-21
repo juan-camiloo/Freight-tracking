@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -62,6 +63,11 @@ export default function ProfileDetail() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
 
+  // Estado para edición de alias (nickname)
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [savingNickname, setSavingNickname] = useState(false);
+
   const filteredCompanies = useMemo(() => {
     const q = companySearchQuery.trim().toLowerCase();
     if (!q) return allCompanies;
@@ -93,6 +99,7 @@ export default function ProfileDetail() {
 
       if (profileError) throw profileError;
       setProfile(profileData);
+      setNicknameDraft(profileData.nickname || '');
 
       // Cargar datos de empresa si el perfil tiene company_id
       if (profileData.company_id) {
@@ -109,6 +116,34 @@ export default function ProfileDetail() {
       notification.error(t('profileDetail.loadError'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveNickname = async () => {
+    const clean = nicknameDraft.trim();
+    if (!clean) {
+      notification.error(t('profileDetail.nicknameEmpty', { defaultValue: 'El alias no puede estar vacío' }));
+      return;
+    }
+
+    if (!profile) return;
+
+    setSavingNickname(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ nickname: clean })
+        .eq('id', profileId);
+
+      if (error) throw error;
+
+      setProfile((prev) => (prev ? { ...prev, nickname: clean } : null));
+      setIsEditingNickname(false);
+      notification.success(t('profileDetail.nicknameUpdated', { defaultValue: 'Alias actualizado correctamente' }));
+    } catch {
+      notification.error(t('profileDetail.nicknameError', { defaultValue: 'No se pudo actualizar el alias' }));
+    } finally {
+      setSavingNickname(false);
     }
   };
 
@@ -259,9 +294,69 @@ export default function ProfileDetail() {
 
         <View style={styles.grid}>
           <View style={[styles.section, styles.shadowCard]}>
-            <Text style={styles.sectionTitle}>{t('profileDetail.sectionInfo')}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{t('profileDetail.sectionInfo')}</Text>
+              {!isEditingNickname ? (
+                <TouchableOpacity
+                  style={styles.editCompanyButton}
+                  onPress={() => {
+                    setNicknameDraft(profile.nickname || '');
+                    setIsEditingNickname(true);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={15} color={AUTH_COLORS.orange} />
+                  <Text style={styles.editCompanyButtonText}>
+                    {t('common.edit', { defaultValue: 'Editar' })}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
             <InfoRow label={t('profileDetail.email')} value={profile.email || ''} />
-            <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
+
+            {isEditingNickname ? (
+              <View style={styles.editNicknameContainer}>
+                <Text style={styles.infoLabel}>{t('profileDetail.alias')}</Text>
+                <TextInput
+                  style={styles.nicknameInput}
+                  value={nicknameDraft}
+                  onChangeText={setNicknameDraft}
+                  placeholder={t('profileDetail.nicknamePlaceholder', { defaultValue: 'Ingresa el alias...' })}
+                  placeholderTextColor={AUTH_COLORS.secondaryText}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleSaveNickname}
+                />
+                <View style={styles.editActionsRow}>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => {
+                      setNicknameDraft(profile.nickname || '');
+                      setIsEditingNickname(false);
+                    }}
+                    disabled={savingNickname}
+                  >
+                    <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveBtn, savingNickname && styles.saveBtnDisabled]}
+                    onPress={handleSaveNickname}
+                    disabled={savingNickname}
+                  >
+                    {savingNickname ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-outline" size={15} color="#ffffff" />
+                        <Text style={styles.saveBtnText}>{t('common.save')}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <InfoRow label={t('profileDetail.alias')} value={profile.nickname || ''} />
+            )}
           </View>
 
           {/* Sección de Empresa Asignada con gestión directa */}
@@ -760,6 +855,57 @@ const styles = StyleSheet.create({
   deleteProfileButtonText: {
     color: AUTH_COLORS.danger,
     fontSize: 14,
+    fontWeight: '700',
+  },
+  editNicknameContainer: {
+    gap: 8,
+    paddingTop: 6,
+  },
+  nicknameInput: {
+    height: 44,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    paddingHorizontal: 14,
+    color: AUTH_COLORS.primaryText,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  cancelBtnText: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: AUTH_COLORS.orange,
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
 });

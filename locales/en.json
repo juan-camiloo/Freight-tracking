@@ -184,7 +184,13 @@
     "empty": "No profiles available",
     "loadError": "Could not load profiles",
     "noSession": "No active session",
-    "unknownError": "Something went wrong. Please try again"
+    "unknownError": "Something went wrong. Please try again",
+    "editNickname": "Change alias",
+    "editNicknameTitle": "Edit user alias",
+    "nicknameUpdated": "Alias updated successfully",
+    "nicknameEmpty": "Alias cannot be empty",
+    "nicknameError": "Could not update alias",
+    "nicknamePlaceholder": "Enter new alias..."
   },
   "supportInbox": {
     "headerTitle": "Support tickets",
@@ -283,7 +289,12 @@
     "deleteConfirm": "Are you sure you want to move \"{{name}}\" to the system trash?",
     "deleteSuccess": "Profile moved to trash",
     "deleteError": "Could not move profile to trash",
-    "deleteAction": "Move profile to trash"
+    "deleteAction": "Move profile to trash",
+    "editNickname": "Change alias",
+    "nicknameUpdated": "Alias updated successfully",
+    "nicknameEmpty": "Alias cannot be empty",
+    "nicknameError": "Could not update alias",
+    "nicknamePlaceholder": "Enter new alias..."
   },
   "assignShipment": {
     "targetProfile": "Target profile",

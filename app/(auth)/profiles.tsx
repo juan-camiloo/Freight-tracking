@@ -9,8 +9,10 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -48,6 +50,11 @@ export default function Profiles() {
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Estado para edición rápida de alias (nickname)
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [quickNickname, setQuickNickname] = useState('');
+  const [savingQuickNickname, setSavingQuickNickname] = useState(false);
 
   const resolveErrorMessage = async (response: Response, fallbackMessage: string) => {
     try {
@@ -166,6 +173,38 @@ export default function Profiles() {
     setSearchResults(next);
   };
 
+  const handleSaveQuickNickname = async () => {
+    if (!editingProfile) return;
+    const clean = quickNickname.trim();
+    if (!clean) {
+      notification.error(t('profiles.nicknameEmpty', { defaultValue: 'El alias no puede estar vacío' }));
+      return;
+    }
+
+    setSavingQuickNickname(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ nickname: clean })
+        .eq('id', editingProfile.id);
+
+      if (error) throw error;
+
+      setProfiles((prev) =>
+        prev.map((p) => (p.id === editingProfile.id ? { ...p, nickname: clean } : p)),
+      );
+      setSearchResults((prev) =>
+        prev.map((p) => (p.id === editingProfile.id ? { ...p, nickname: clean } : p)),
+      );
+      setEditingProfile(null);
+      notification.success(t('profiles.nicknameUpdated', { defaultValue: 'Alias actualizado correctamente' }));
+    } catch {
+      notification.error(t('profiles.nicknameError', { defaultValue: 'No se pudo actualizar el alias' }));
+    } finally {
+      setSavingQuickNickname(false);
+    }
+  };
+
   const backFunction = () => {
     if (router.canGoBack()) {
       router.back();
@@ -267,7 +306,20 @@ export default function Profiles() {
                   {item.email ? <Text style={styles.cardSub}>{item.email}</Text> : null}
                 </View>
 
-                <Ionicons name="chevron-forward" size={18} color={AUTH_COLORS.secondaryText} />
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.quickEditButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setEditingProfile(item);
+                      setQuickNickname(item.nickname || '');
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="pencil-outline" size={15} color={AUTH_COLORS.orange} />
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={18} color={AUTH_COLORS.secondaryText} />
+                </View>
               </View>
             </TouchableOpacity>
           );
@@ -281,6 +333,63 @@ export default function Profiles() {
           </View>
         }
       />
+
+      <Modal
+        visible={Boolean(editingProfile)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setEditingProfile(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, isDesktop && styles.modalCardDesktop]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('profiles.editNicknameTitle', { defaultValue: 'Editar alias de usuario' })}</Text>
+              <TouchableOpacity onPress={() => setEditingProfile(null)}>
+                <Ionicons name="close" size={22} color={AUTH_COLORS.primaryText} />
+              </TouchableOpacity>
+            </View>
+
+            {editingProfile?.email ? (
+              <Text style={styles.modalSubtitle}>{editingProfile.email}</Text>
+            ) : null}
+
+            <TextInput
+              style={styles.modalInput}
+              value={quickNickname}
+              onChangeText={setQuickNickname}
+              placeholder={t('profiles.nicknamePlaceholder', { defaultValue: 'Ingresa el nuevo alias...' })}
+              placeholderTextColor={AUTH_COLORS.secondaryText}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSaveQuickNickname}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setEditingProfile(null)}
+                disabled={savingQuickNickname}
+              >
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, savingQuickNickname && styles.saveBtnDisabled]}
+                onPress={handleSaveQuickNickname}
+                disabled={savingQuickNickname}
+              >
+                {savingQuickNickname ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-outline" size={15} color="#ffffff" />
+                    <Text style={styles.modalSaveText}>{t('common.save')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <TouchableOpacity
         style={[styles.addUserFab, !isDesktop && styles.addUserFabMobile]}
@@ -477,5 +586,103 @@ const styles = StyleSheet.create({
     color: AUTH_COLORS.secondaryText,
     fontSize: 14,
     textAlign: 'center',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickEditButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: AUTH_COLORS.orangeSoft,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: AUTH_COLORS.surface,
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  modalCardDesktop: {
+    maxWidth: 460,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: AUTH_COLORS.primaryText,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  modalSubtitle: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: -8,
+  },
+  modalInput: {
+    height: 46,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.orangeBorder,
+    paddingHorizontal: 14,
+    color: AUTH_COLORS.primaryText,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  modalCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: AUTH_COLORS.line,
+  },
+  modalCancelText: {
+    color: AUTH_COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: AUTH_COLORS.orange,
+  },
+  modalSaveText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
   },
 });

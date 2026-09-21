@@ -184,7 +184,13 @@
     "empty": "No hay perfiles disponibles",
     "loadError": "No se pudieron cargar los perfiles",
     "noSession": "No hay sesión activa",
-    "unknownError": "Algo salió mal. Inténtalo de nuevo"
+    "unknownError": "Algo salió mal. Inténtalo de nuevo",
+    "editNickname": "Cambiar alias",
+    "editNicknameTitle": "Editar alias de usuario",
+    "nicknameUpdated": "Alias actualizado correctamente",
+    "nicknameEmpty": "El alias no puede estar vacío",
+    "nicknameError": "No se pudo actualizar el alias",
+    "nicknamePlaceholder": "Ingresa el nuevo alias..."
   },
   "supportInbox": {
     "headerTitle": "Tickets de soporte",
@@ -283,7 +289,12 @@
     "deleteConfirm": "¿Estás seguro de mover el perfil de \"{{name}}\" a la papelera del sistema?",
     "deleteSuccess": "Perfil movido a la papelera",
     "deleteError": "No se pudo mover el perfil a la papelera",
-    "deleteAction": "Mover perfil a la papelera"
+    "deleteAction": "Mover perfil a la papelera",
+    "editNickname": "Cambiar alias",
+    "nicknameUpdated": "Alias actualizado correctamente",
+    "nicknameEmpty": "El alias no puede estar vacío",
+    "nicknameError": "No se pudo actualizar el alias",
+    "nicknamePlaceholder": "Ingresa el nuevo alias..."
   },
   "assignShipment": {
     "targetProfile": "Perfil destino",
