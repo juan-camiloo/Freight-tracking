@@ -24,6 +24,17 @@ import {
 import { useNativeNotification } from '../components/ui/NativeNotification';
 import { supabase } from '../lib/URLs';
 
+let cachedLoginDraft: { email: string; step: 'email' | 'code' } = { email: '', step: 'email' };
+
+function getInitialDraft() {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const raw = window.sessionStorage.getItem('freight_login_draft');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+  }
+  return cachedLoginDraft;
+}
 
 export default function Login() {
   const { t } = useTranslation();
@@ -31,11 +42,21 @@ export default function Login() {
   const { height, isDesktop } = useResponsive();
   const { reason } = useLocalSearchParams<{ reason?: string }>();
 
-  const [cooldown, setCooldown] = useState(0)
-  const [email, setEmail] = useState('');
+  const initialDraft = getInitialDraft();
+  const [cooldown, setCooldown] = useState(0);
+  const [email, setEmail] = useState(initialDraft.email || '');
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [step, setStep] = useState<'email' | 'code'>(initialDraft.step || 'email');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    cachedLoginDraft = { email, step };
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('freight_login_draft', JSON.stringify({ email, step }));
+      } catch {}
+    }
+  }, [email, step]);
 
   useEffect(() => {
     if (reason === 'account_inactive') {
@@ -114,6 +135,12 @@ export default function Login() {
           return;
         }
 
+        cachedLoginDraft = { email: '', step: 'email' };
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          try {
+            window.sessionStorage.removeItem('freight_login_draft');
+          } catch {}
+        }
         notification.success(t('login.success'));
         router.replace('/');
       }
@@ -182,6 +209,12 @@ export default function Login() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
+                  cachedLoginDraft = { email: '', step: 'email' };
+                  if (typeof window !== 'undefined' && window.sessionStorage) {
+                    try {
+                      window.sessionStorage.removeItem('freight_login_draft');
+                    } catch {}
+                  }
                   setStep('email');
                   setCode('');
                 }}
