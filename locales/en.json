@@ -144,7 +144,9 @@
       "incotermPlaceholder": "FOB, CIF...",
       "cargoTypePlaceholder": "General, dangerous...",
       "bookingPlaceholder": "Confirmed...",
-      "inspectionPlaceholder": "Documentary..."
+      "inspectionPlaceholder": "Documentary...",
+      "showAdvanced": "Advanced filters (dates and details)",
+      "hideAdvanced": "Hide advanced filters"
     }
   },
   "addUser": {
@@ -190,7 +192,8 @@
     "nicknameUpdated": "Alias updated successfully",
     "nicknameEmpty": "Alias cannot be empty",
     "nicknameError": "Could not update alias",
-    "nicknamePlaceholder": "Enter new alias..."
+    "nicknamePlaceholder": "Enter new alias...",
+    "internalTeam": "Internal team"
   },
   "supportInbox": {
     "headerTitle": "Support tickets",
@@ -239,7 +242,8 @@
       "email": "Email",
       "status": "Status",
       "createdAt": "Created",
-      "resolvedAt": "Resolved"
+      "resolvedAt": "Resolved",
+      "resolvedBy": "Resolved by"
     },
     "notResolved": "Unresolved",
     "actionInRevision": "Mark in review",
@@ -405,7 +409,16 @@
     "aiNoAnswer": "I could not generate an answer to your request.",
     "doNotFound": "I could not find information for that DO. Please verify the number or contact our team.",
     "missingData": "I do not have that information registered for your shipment right now. Our operations team can confirm it manually.",
-    "internalError": "Internal server error"
+    "internalError": "Internal server error",
+    "options": {
+      "administrative": "Administrative",
+      "facturation": "Billing",
+      "comercial": "Commercial",
+      "pricing": "Pricing",
+      "maritime": "Ocean operations",
+      "air": "Air operations",
+      "other": "Other"
+    }
   },
   "createTicket": {
     "authHeaderMissing": "Missing authorization header",
@@ -557,7 +570,10 @@
         },
         "onWay": "On the way",
         "waitingInspection": "Waiting for inspection",
-        "arrived": "Arrived"
+        "arrived": "Arrived",
+        "departureMaritime": "Waiting for vessel departure",
+        "departureAir": "Waiting for flight departure",
+        "departureLand": "Waiting for dispatch"
       },
       "operationType": {
         "expo": "Expo",
@@ -634,7 +650,10 @@
     "origin": "Origin *",
     "destination": "Destination *",
     "observation": "Notes (optional)",
-    "observationPlaceholder": "Add notes..."
+    "observationPlaceholder": "Add notes...",
+    "loadTimeout": "Loading is taking longer than expected.",
+    "timeoutError": "Timed out while saving changes.",
+    "deleteShipment": "Delete shipment"
   },
   "shipmentDetail": {
     "headerTitle": "Shipment details",
@@ -692,9 +711,29 @@
       "awb": "AWB/Booking",
       "flight": "Flight/Vessel",
       "container": "Container",
-      "carrier": "Carrier/Airline"
+      "carrier": "Carrier/Airline",
+      "vessel": "Vessel",
+      "flightOnly": "Flight",
+      "vehicle": "Vehicle"
     },
-    "header": "Quick info"
+    "header": "Quick info",
+    "fileTooLarge": "File exceeds maximum allowed size.",
+    "uploadSuccess": "Document uploaded successfully",
+    "docNoPath": "Document path not found",
+    "docOpenError": "Could not open document",
+    "deleteDocTitle": "Delete document",
+    "deleteDocConfirm": "Are you sure you want to delete this document?",
+    "deleteDocOk": "Document deleted successfully",
+    "deleteDocError": "Could not delete document",
+    "deleteUpdateTitle": "Delete update",
+    "deleteUpdateConfirm": "Are you sure you want to delete this update?",
+    "deleteUpdateOk": "Update deleted successfully",
+    "deleteUpdateError": "Could not delete update",
+    "documentsDescription": "Manage attached shipment documents",
+    "addObservation": "Add observation",
+    "observationRequired": "Please enter an observation",
+    "observationAdded": "Observation added successfully",
+    "observationAddError": "Error adding observation"
   },
   "_news_disabled": {
     "header": "News",
@@ -779,12 +818,25 @@
     "assignShipments": "Assign shipments to this company",
     "createCompany": "Create company",
     "noMembersFound": "No members found matching that search",
-    "noShipmentsFound": "No shipments found matching that search"
+    "noShipmentsFound": "No shipments found matching that search",
+    "unassignShipmentTitle": "Unassign shipment",
+    "unassignShipmentConfirm": "Are you sure you want to unassign this shipment from the company?",
+    "unassignShipment": "Unassign shipment",
+    "shipmentUnassigned": "Shipment unassigned successfully",
+    "unassignShipmentError": "Could not unassign shipment",
+    "deleteCompanyTitle": "Delete company",
+    "deleteCompanyConfirm": "Are you sure you want to delete this company? Shipments will be unassigned.",
+    "deleteCompany": "Delete company",
+    "deleteSuccess": "Company moved to trash",
+    "deleteError": "Could not move company to trash"
   },
   "shipmentProgress": {
     "departure": "Departure",
     "arrival": "Arrival",
-    "stalled": "Cargo stalled — route delay"
+    "stalled": "Cargo stalled — route delay",
+    "departureAir": "Departure",
+    "departureLand": "Dispatch",
+    "departureMaritime": "Sailing"
   },
   "trash": {
     "header": "System Trash",
@@ -826,5 +878,39 @@
     "system": "Support & Control",
     "internalRole": "Operations",
     "clientRole": "Client"
+  },
+  "news": {
+    "header": "News",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago",
+    "important": "Important",
+    "more": "Recent updates",
+    "empty": "No news available",
+    "category": {
+      "urgent": "Urgent",
+      "common": "General"
+    },
+    "create": {
+      "header": "New announcement",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter a title",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Enter news content",
+      "categoryLabel": "Category",
+      "imageLabel": "Image (optional)",
+      "pickImage": "Select image",
+      "submit": "Publish",
+      "errorTitle": "Title required",
+      "errorContent": "Content required",
+      "imageErrorTitle": "News created",
+      "imageErrorBody": "The news was posted, but the image could not be uploaded.",
+      "submitErrorTitle": "Error",
+      "submitErrorBody": "Could not publish news. Please try again."
+    }
+  },
+  "auth": {
+    "logout": "Log out"
   }
 }

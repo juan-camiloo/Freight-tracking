@@ -14,28 +14,32 @@ type RouteProgressProps = {
 // --- Proporciones de sección de la barra de progreso ---
 const SECTIONS = {
   pre: { min: 0.0, max: 0.25 },
-  transit: { min: 0.25, max: 0.75 },
+  transit: { min: 0.29, max: 0.71 },
   post: { min: 0.75, max: 1.0 },
 } as const;
 
 // Mapeo directo de estados fijos a porcentajes de progreso específicos
 const FIXED_STATUS_PROGRESS_MAP: Record<string, number> = {
-  // Exportación
-  expo_start_operation: 0.08,
-  expo_booking_confirmation: 0.15,
-  expo_vehicle: 0.22,
-  expo_documentation: 0.25,
-  expo_departure: 0.35,
+  // Exportación: Fases previas a la salida (0.00 - 0.25)
+  // El hito de Zarpe/Salida está en 0.25 (25%).
+  // "En espera del zarpe" se ubica en 0.21 — justo antes del puntito pero sin quedar muy atrás.
+  expo_start_operation: 0.04,
+  expo_booking_confirmation: 0.09,
+  expo_vehicle: 0.14,
+  expo_documentation: 0.18,
+  expo_departure: 0.21, // En espera del zarpe/salida (muy cerca del puntito de 0.25)
+  // Llegada confirmada a destino (1.0)
   expo_arrival_confirmation: 1.0,
 
-  // Importación
-  impo_start_operation: 0.08,
-  impo_filling: 0.16,
-  impo_documentation: 0.25,
-  impo_departure: 0.35,
-  impo_customs: 0.80,
-  impo_arrival_confirmation: 0.90,
-  impo_national_transit: 1.0,
+  // Importación: Fases previas en origen (0.00 - 0.25)
+  impo_start_operation: 0.04,
+  impo_filling: 0.09,
+  impo_documentation: 0.15,
+  impo_departure: 0.21, // En espera del zarpe/salida en origen (muy cerca del puntito)
+  // Fases posteriores al arribo (0.75 - 1.00)
+  impo_customs: 0.80, // En trámites de aduana tras arribo (después del puntito de 0.75)
+  impo_national_transit: 0.90, // En tránsito nacional hacia destino final
+  impo_arrival_confirmation: 1.0, // Confirmación de llegada a destino / entrega final
 
   // Estados legacy / frases comunes
   arrived: 1.0,
@@ -83,14 +87,14 @@ function getShipmentProgress(
     return { value: frozenProgress, stalled: true };
   }
 
-  // 2. Si el estado es de tránsito internacional continuo, interpola por fechas
-  if (IN_TRANSIT_STATUSES.has(normalizedStatus) || normalizedStatus.includes('transit') || normalizedStatus.includes('tránsit')) {
-    return { value: interpolateTransit(etd, eta, atd, ata, Date.now()), stalled: false };
-  }
-
-  // 3. Si existe un valor predefinido para el estado fijo
+  // 2. Si existe un valor predefinido para el estado fijo (pre-zarpe, aduana, entrega)
   if (normalizedStatus in FIXED_STATUS_PROGRESS_MAP) {
     return { value: FIXED_STATUS_PROGRESS_MAP[normalizedStatus], stalled: false };
+  }
+
+  // 3. Si el estado es de tránsito internacional continuo, interpola por fechas
+  if (IN_TRANSIT_STATUSES.has(normalizedStatus) || normalizedStatus.includes('transit') || normalizedStatus.includes('tránsit')) {
+    return { value: interpolateTransit(etd, eta, atd, ata, Date.now()), stalled: false };
   }
 
   // 4. Heurísticas para textos libres o legacy
@@ -100,16 +104,24 @@ function getShipmentProgress(
   if (normalizedStatus.includes('aduan') || normalizedStatus.includes('inspecc') || normalizedStatus.includes('custom')) {
     return { value: 0.80, stalled: false };
   }
-  if (normalizedStatus.includes('inici') || normalizedStatus.includes('reserv') || normalizedStatus.includes('booking') || normalizedStatus.includes('documen')) {
-    return { value: 0.20, stalled: false };
+  if (normalizedStatus.includes('espera') || normalizedStatus.includes('departure') || normalizedStatus.includes('salida') || normalizedStatus.includes('despacho') || normalizedStatus.includes('zarpe')) {
+    return { value: 0.21, stalled: false };
+  }
+  if (normalizedStatus.includes('inici') || normalizedStatus.includes('reserv') || normalizedStatus.includes('booking') || normalizedStatus.includes('documen') || normalizedStatus.includes('vehic')) {
+    return { value: 0.10, stalled: false };
   }
 
   // Fallback si hay fechas válidas: intenta interpolar
   if ((atd || etd) && (ata || eta)) {
+    const departureTime = (atd ? parseDateSafe(atd) : parseDateSafe(etd))?.getTime();
+    if (departureTime && Date.now() < departureTime && !atd) {
+      // Si la fecha de salida aún no ha llegado y no hay salida confirmada, queda atrás del punto de salida
+      return { value: 0.21, stalled: false };
+    }
     return { value: interpolateTransit(etd, eta, atd, ata, Date.now()), stalled: false };
   }
 
-  return { value: 0.1, stalled: false };
+  return { value: 0.08, stalled: false };
 }
 
 // Interpola dentro del rango 25-75%, usando ETD/ATD/ETA/ATA.
@@ -155,6 +167,15 @@ export function RouteProgress({ toneColor, shipment }: RouteProgressProps) {
   const locale = i18n.language === 'es' ? 'es-CO' : 'en-US';
   const barColor = stalled ? COLORS.orange : toneColor;
 
+  const departureLabel =
+    shipment?.shipment_type === 'maritime'
+      ? t('shipmentProgress.departureMaritime', { defaultValue: 'Zarpe' })
+      : shipment?.shipment_type === 'air'
+        ? t('shipmentProgress.departureAir', { defaultValue: 'Salida' })
+        : shipment?.shipment_type === 'land'
+          ? t('shipmentProgress.departureLand', { defaultValue: 'Despacho' })
+          : t('shipmentProgress.departure', { defaultValue: 'Salida' });
+
   return (
     <View style={styles.wrap}>
       <View style={styles.routeProgressWrap}>
@@ -174,7 +195,7 @@ export function RouteProgress({ toneColor, shipment }: RouteProgressProps) {
       <View style={styles.labelsRow}>
         <View style={[styles.labelBlock, { left: '25%' }]}>
           <Text style={styles.checkpointLabel}>
-            {t('shipmentProgress.departure')}
+            {departureLabel}
           </Text>
           <Text style={styles.checkpointDate}>
             {(shipment?.atd ?? shipment?.etd) ? formatDateDisplay(shipment?.atd ?? shipment?.etd, locale) : '—'}

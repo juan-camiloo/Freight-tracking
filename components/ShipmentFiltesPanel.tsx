@@ -222,8 +222,8 @@ export function ShipmentFiltersPanel({
             />
             <Text style={styles.advancedToggleText}>
               {showAdvanced
-                ? (t('dashboard.filters.hideAdvanced') || 'Ocultar filtros avanzados')
-                : (t('dashboard.filters.showAdvanced') || 'Filtros avanzados (fechas y detalles)')}
+                ? t('dashboard.filters.hideAdvanced', { defaultValue: 'Ocultar filtros avanzados' })
+                : t('dashboard.filters.showAdvanced', { defaultValue: 'Filtros avanzados (fechas y detalles)' })}
             </Text>
           </TouchableOpacity>
 

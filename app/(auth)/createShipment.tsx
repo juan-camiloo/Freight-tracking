@@ -31,6 +31,7 @@ import {
   INSPECTION_STATUSES,
   SHIPMENT_TYPE_OPTIONS,
   getShipmentOperationLabelKey,
+  getShipmentStatusLabel,
   getShipmentStatusOptions,
   inferShipmentOperationType,
   isValidContainerNumber,
@@ -129,11 +130,11 @@ export default function CreateShipment() {
   const cargoTypeOptions = resolveOptions(CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(INSPECTION_STATUSES);
-  const statusOptions = resolveOptions(getShipmentStatusOptions(doNumber));
+  const statusOptions = resolveOptions(getShipmentStatusOptions(doNumber, currentStatus));
   const statusOptionsWithCurrentValue = currentStatus && !statusOptions.some((option) => option.value === currentStatus)
-    ? [...statusOptions, { label: currentStatus, value: currentStatus }]
+    ? [...statusOptions, { label: getShipmentStatusLabel(currentStatus, t, shipmentType), value: currentStatus }]
     : statusOptions;
-  const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber);
+  const operationTypeLabelKey = getShipmentOperationLabelKey(doNumber, currentStatus);
   const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
 
   const carrierLabel =

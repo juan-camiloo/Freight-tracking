@@ -438,7 +438,13 @@ function HeroShipmentCard({
       {/* 3. Quick Specs Grid (Datos clave en ficha compacta) */}
       <View style={styles.specsGrid}>
         <SpecItem
-          icon="airplane-outline"
+          icon={
+            shipment.shipment_type === 'maritime'
+              ? 'boat-outline'
+              : shipment.shipment_type === 'land'
+                ? 'car-outline'
+                : 'airplane-outline'
+          }
           label={
             shipment.shipment_type === 'maritime'
               ? t('shipmentForm.labels.carrierMaritime')
@@ -451,8 +457,22 @@ function HeroShipmentCard({
           value={shipment.carrier}
         />
         <SpecItem
-          icon="navigate-outline"
-          label={t('shipmentDetail.labels.flight')}
+          icon={
+            shipment.shipment_type === 'maritime'
+              ? 'boat-outline'
+              : shipment.shipment_type === 'land'
+                ? 'car-outline'
+                : 'navigate-outline'
+          }
+          label={
+            shipment.shipment_type === 'maritime'
+              ? (t('shipmentDetail.labels.vessel') || 'Motonave')
+              : shipment.shipment_type === 'air'
+                ? (t('shipmentDetail.labels.flightOnly') || 'Vuelo')
+                : shipment.shipment_type === 'land'
+                  ? (t('shipmentDetail.labels.vehicle') || 'Vehículo')
+                  : t('shipmentDetail.labels.flight')
+          }
           value={shipment.flight_vessel}
         />
         <SpecItem
@@ -659,7 +679,7 @@ const STATUS_TONE_CONFIG: Record<ToneKey, ToneResult> = {
 
 const STATUS_TONE_MAP: { pattern: RegExp; tone: ToneKey }[] = [
   { pattern: /entreg|recibid|origin|arrived|delivered|arrival_confirmation/i, tone: 'green' },
-  { pattern: /transit|pending|waiting|program|tránsit|on.way|departure/i, tone: 'blue' },
+  { pattern: /transit|pending|waiting|program|tránsit|on.way|departure|start_operation|booking_confirmation|vehicle|documentation|filling/i, tone: 'blue' },
 ];
 
 function getStatusTone(status: string | null | undefined): ToneResult {

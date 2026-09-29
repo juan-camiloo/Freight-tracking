@@ -123,11 +123,11 @@ export default function EditShipmentScreen() {
   const cargoTypeOptions = resolveOptions(types.CARGO_TYPES);
   const bookingStatusOptions = resolveOptions(types.BOOKING_STATUSES);
   const inspectionStatusOptions = resolveOptions(types.INSPECTION_STATUSES);
-  const statusOptions = resolveOptions(types.getShipmentStatusOptions(doNumber));
+  const statusOptions = resolveOptions(types.getShipmentStatusOptions(doNumber, currentStatus));
   const statusOptionsWithCurrentValue = currentStatus && !statusOptions.some((option) => option.value === currentStatus)
-    ? [...statusOptions, { label: currentStatus, value: currentStatus }]
+    ? [...statusOptions, { label: types.getShipmentStatusLabel(currentStatus, t, shipmentType), value: currentStatus }]
     : statusOptions;
-  const operationTypeLabelKey = types.getShipmentOperationLabelKey(doNumber);
+  const operationTypeLabelKey = types.getShipmentOperationLabelKey(doNumber, currentStatus);
   const operationTypeHint = operationTypeLabelKey ? `${t('shipmentForm.labels.operationType')}: ${t(operationTypeLabelKey)}` : undefined;
   const manageLanguage = toggleLanguage;
 

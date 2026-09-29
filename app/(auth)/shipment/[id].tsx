@@ -580,6 +580,15 @@ export default function ShipmentDetail() {
           ? t('shipmentForm.labels.carrierLand')
           : t('shipmentDetail.labels.carrier');
 
+  const flightVesselLabel =
+    shipment.shipment_type === 'maritime'
+      ? (t('shipmentDetail.labels.vessel') || 'Motonave')
+      : shipment.shipment_type === 'air'
+        ? (t('shipmentDetail.labels.flightOnly') || 'Vuelo')
+        : shipment.shipment_type === 'land'
+          ? (t('shipmentDetail.labels.vehicle') || 'Vehículo')
+          : t('shipmentDetail.labels.flight');
+
   return (
     <View style={styles.container}>
       <AuthScreenBackground />
@@ -704,7 +713,7 @@ export default function ShipmentDetail() {
               <InfoRow label={t('shipmentDetail.labels.exporter')} value={shipment.exporter || ''} />
               <InfoRow label={t('shipmentDetail.labels.consignee')} value={shipment.consignee || ''} />
               {shipment.air_waybill ? <InfoRow label={t('shipmentDetail.labels.awb')} value={shipment.air_waybill} /> : null}
-              {shipment.flight_vessel ? <InfoRow label={t('shipmentDetail.labels.flight')} value={shipment.flight_vessel} /> : null}
+              {shipment.flight_vessel ? <InfoRow label={flightVesselLabel} value={shipment.flight_vessel} /> : null}
               {shipment.container_number ? <InfoRow label={t('shipmentDetail.labels.container')} value={shipment.container_number} /> : null}
               {shipment.carrier ? <InfoRow label={carrierLabel} value={shipment.carrier} /> : null}
             </View>
@@ -981,10 +990,10 @@ function QuickActionButton({
 
 function getStatusTone(status: string | null | undefined) {
   const s = (status ?? '').toLowerCase();
-  if (s.includes('entreg') || s.includes('recibid') || s.includes('origin')) {
+  if (/entreg|recibid|origin|arrived|delivered|arrival_confirmation/i.test(s)) {
     return { pillBackground: AUTH_COLORS.greenSoft, pillText: AUTH_COLORS.green, progress: AUTH_COLORS.green };
   }
-  if (s.includes('pending') || s.includes('waiting') || s.includes('program')) {
+  if (/transit|pending|waiting|program|tránsit|on.way|departure|start_operation|booking_confirmation|vehicle|documentation|filling/i.test(s)) {
     return { pillBackground: AUTH_COLORS.blueSoft, pillText: AUTH_COLORS.blue, progress: AUTH_COLORS.blue };
   }
   return { pillBackground: AUTH_COLORS.orangeSoft, pillText: AUTH_COLORS.orange, progress: AUTH_COLORS.orange };

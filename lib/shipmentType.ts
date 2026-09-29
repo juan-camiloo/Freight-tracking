@@ -162,8 +162,8 @@ export const STATUS_OPTIONS_BY_OPERATION: Record<ShipmentOperationType, Shipment
     { labelKey: 'shipmentForm.options.status.impo.departure', value: 'impo_departure' },
     { labelKey: 'shipmentForm.options.status.impo.internationalTransit', value: 'impo_international_transit' },
     { labelKey: 'shipmentForm.options.status.impo.customs', value: 'impo_customs' },
-    { labelKey: 'shipmentForm.options.status.impo.arrivalConfirmation', value: 'impo_arrival_confirmation' },
     { labelKey: 'shipmentForm.options.status.impo.nationalTransit', value: 'impo_national_transit' },
+    { labelKey: 'shipmentForm.options.status.impo.arrivalConfirmation', value: 'impo_arrival_confirmation' },
   ],
 };
 
@@ -185,31 +185,61 @@ export const SHIPMENT_STATUS_LABEL_KEYS: Record<string, string> = {
   impo_departure: 'shipmentForm.options.status.impo.departure',
   impo_international_transit: 'shipmentForm.options.status.impo.internationalTransit',
   impo_customs: 'shipmentForm.options.status.impo.customs',
-  impo_arrival_confirmation: 'shipmentForm.options.status.impo.arrivalConfirmation',
   impo_national_transit: 'shipmentForm.options.status.impo.nationalTransit',
-  // Compatibilidad con estados legacy si existieran en registros anteriores
+  impo_arrival_confirmation: 'shipmentForm.options.status.impo.arrivalConfirmation',
+  // Compatibilidad con estados legacy o normalizados
   on_way: 'shipmentForm.options.status.onWay',
+  in_transit: 'shipmentForm.options.status.onWay',
+  transit: 'shipmentForm.options.status.onWay',
   waiting_inspection: 'shipmentForm.options.status.waitingInspection',
+  customs: 'dashboard.filters.customs',
   arrived: 'shipmentForm.options.status.arrived',
+  delivered: 'dashboard.filters.delivered',
+  pending: 'dashboard.pendingLabel',
 };
 
 export function getShipmentStatusLabel(
   status: string | null | undefined,
-  t: (key: string, options?: any) => string
+  t: (key: string, options?: any) => string,
+  shipmentType?: string | null,
 ): string {
   if (!status) return t('dashboard.pendingLabel');
-  const key = SHIPMENT_STATUS_LABEL_KEYS[status];
+  const normalized = status.trim().toLowerCase();
+
+  // Caso específico para salida/zarpe según la vía
+  if (normalized === 'expo_departure' || normalized === 'impo_departure') {
+    if (shipmentType === 'air') {
+      return t('shipmentForm.options.status.departureAir', { defaultValue: 'En espera de salida' });
+    }
+    if (shipmentType === 'land') {
+      return t('shipmentForm.options.status.departureLand', { defaultValue: 'En espera de despacho' });
+    }
+    if (shipmentType === 'maritime') {
+      return t('shipmentForm.options.status.departureMaritime', { defaultValue: 'En espera del zarpe' });
+    }
+  }
+
+  const key = SHIPMENT_STATUS_LABEL_KEYS[normalized] ?? SHIPMENT_STATUS_LABEL_KEYS[status];
   return key ? t(key) : status;
 }
 
-export const inferShipmentOperationType = (doNumber?: string | null): ShipmentOperationType | null => {
+export const inferShipmentOperationType = (
+  doNumber?: string | null,
+  currentStatus?: string | null,
+): ShipmentOperationType | null => {
+  if (currentStatus) {
+    const s = currentStatus.trim().toLowerCase();
+    if (s.startsWith('expo_')) return 'expo';
+    if (s.startsWith('impo_')) return 'impo';
+  }
   const normalizedDo = doNumber?.trim().toUpperCase();
   if (!normalizedDo) return null;
   if (
     normalizedDo.startsWith('X') ||
     normalizedDo.startsWith('EXP') ||
     normalizedDo.startsWith('EXP-') ||
-    normalizedDo.startsWith('EXPO')
+    normalizedDo.startsWith('EXPO') ||
+    normalizedDo.startsWith('DEX')
   ) {
     return 'expo';
   }
@@ -217,7 +247,8 @@ export const inferShipmentOperationType = (doNumber?: string | null): ShipmentOp
     normalizedDo.startsWith('M') ||
     normalizedDo.startsWith('IMP') ||
     normalizedDo.startsWith('IMP-') ||
-    normalizedDo.startsWith('IMPO')
+    normalizedDo.startsWith('IMPO') ||
+    normalizedDo.startsWith('DIM')
   ) {
     return 'impo';
   }
@@ -249,13 +280,23 @@ export const isValidContainerNumber = (value?: string | null): boolean => {
   );
 };
 
-export const getShipmentStatusOptions = (doNumber?: string | null): ShipmentStatusOption[] => {
-  const operationType = inferShipmentOperationType(doNumber);
-  return operationType ? STATUS_OPTIONS_BY_OPERATION[operationType] : STATUSES;
+export const getShipmentStatusOptions = (
+  doNumber?: string | null,
+  currentStatus?: string | null,
+): ShipmentStatusOption[] => {
+  const operationType = inferShipmentOperationType(doNumber, currentStatus);
+  if (operationType) return STATUS_OPTIONS_BY_OPERATION[operationType];
+  return [
+    ...STATUS_OPTIONS_BY_OPERATION.expo,
+    ...STATUS_OPTIONS_BY_OPERATION.impo,
+  ];
 };
 
-export const getShipmentOperationLabelKey = (doNumber?: string | null) => {
-  const operationType = inferShipmentOperationType(doNumber);
+export const getShipmentOperationLabelKey = (
+  doNumber?: string | null,
+  currentStatus?: string | null,
+) => {
+  const operationType = inferShipmentOperationType(doNumber, currentStatus);
   return operationType ? `shipmentForm.options.operationType.${operationType}` : null;
 };
 

@@ -144,7 +144,9 @@
       "incotermPlaceholder": "FOB, CIF...",
       "cargoTypePlaceholder": "General, peligrosa...",
       "bookingPlaceholder": "Confirmada...",
-      "inspectionPlaceholder": "Documental..."
+      "inspectionPlaceholder": "Documental...",
+      "showAdvanced": "Filtros avanzados (fechas y detalles)",
+      "hideAdvanced": "Ocultar filtros avanzados"
     }
   },
   "addUser": {
@@ -190,7 +192,8 @@
     "nicknameUpdated": "Alias actualizado correctamente",
     "nicknameEmpty": "El alias no puede estar vacío",
     "nicknameError": "No se pudo actualizar el alias",
-    "nicknamePlaceholder": "Ingresa el nuevo alias..."
+    "nicknamePlaceholder": "Ingresa el nuevo alias...",
+    "internalTeam": "Equipo interno"
   },
   "supportInbox": {
     "headerTitle": "Tickets de soporte",
@@ -239,7 +242,8 @@
       "email": "Correo",
       "status": "Estado",
       "createdAt": "Creado",
-      "resolvedAt": "Resuelto"
+      "resolvedAt": "Resuelto",
+      "resolvedBy": "Resuelto por"
     },
     "notResolved": "Sin resolver",
     "actionInRevision": "Marcar en revisión",
@@ -405,7 +409,16 @@
     "aiNoAnswer": "No pude generar una respuesta para tu consulta.",
     "doNotFound": "No pude encontrar información para ese DO. Por favor verifica el número o contacta a nuestro equipo.",
     "missingData": "En este momento no tengo registrada esa información para tu embarque. Nuestro equipo de operaciones puede confirmarla manualmente.",
-    "internalError": "Error interno del servidor"
+    "internalError": "Error interno del servidor",
+    "options": {
+      "administrative": "Administrativo",
+      "facturation": "Facturación",
+      "comercial": "Comercial",
+      "pricing": "Pricing",
+      "maritime": "Operación marítima",
+      "air": "Operación aérea",
+      "other": "Otro"
+    }
   },
   "createTicket": {
     "authHeaderMissing": "Falta el encabezado de autorización",
@@ -557,7 +570,10 @@
         },
         "onWay": "En tránsito",
         "waitingInspection": "Esperando inspección",
-        "arrived": "Llegó"
+        "arrived": "Llegó",
+        "departureMaritime": "En espera del zarpe",
+        "departureAir": "En espera de salida",
+        "departureLand": "En espera de despacho"
       },
       "operationType": {
         "expo": "Expo",
@@ -634,7 +650,10 @@
     "origin": "Origen *",
     "destination": "Destino *",
     "observation": "Observación (opcional)",
-    "observationPlaceholder": "Agregar observación..."
+    "observationPlaceholder": "Agregar observación...",
+    "loadTimeout": "La carga de la información está tardando más de lo esperado.",
+    "timeoutError": "Tiempo de espera agotado al guardar los cambios.",
+    "deleteShipment": "Eliminar carga"
   },
   "shipmentDetail": {
     "headerTitle": "Detalles de la carga",
@@ -697,11 +716,26 @@
       "awb": "Guía/Booking",
       "flight": "Vuelo/Motonave",
       "container": "Contenedor",
-      "carrier": "Naviera/Aerolínea"
+      "carrier": "Naviera/Aerolínea",
+      "vessel": "Motonave",
+      "flightOnly": "Vuelo",
+      "vehicle": "Vehículo"
     },
-    "header": "Información rápida"
+    "header": "Información rápida",
+    "fileTooLarge": "El archivo supera el tamaño máximo permitido.",
+    "uploadSuccess": "Documento subido correctamente",
+    "docNoPath": "Ruta de documento no encontrada",
+    "docOpenError": "No se pudo abrir el documento",
+    "deleteDocTitle": "Eliminar documento",
+    "deleteDocConfirm": "¿Estás seguro de que deseas eliminar este documento?",
+    "deleteDocOk": "Documento eliminado correctamente",
+    "deleteDocError": "No se pudo eliminar el documento",
+    "deleteUpdateTitle": "Eliminar novedad",
+    "deleteUpdateConfirm": "¿Estás seguro de que deseas eliminar esta novedad?",
+    "deleteUpdateOk": "Novedad eliminada correctamente",
+    "deleteUpdateError": "No se pudo eliminar la novedad"
   },
-  "_news_disabled" :{
+  "_news_disabled": {
     "header": "Novedades",
     "empty": "No hay novedades disponibles",
     "important": "Importante",
@@ -797,9 +831,12 @@
     "deleteError": "No se pudo mover la empresa a la papelera"
   },
   "shipmentProgress": {
-    "departure": "Zarpe",
+    "departure": "Salida",
     "arrival": "Llegada",
-    "stalled": "Carga detenida — retraso en ruta"
+    "stalled": "Carga detenida — retraso en ruta",
+    "departureMaritime": "Zarpe",
+    "departureAir": "Salida",
+    "departureLand": "Despacho"
   },
   "trash": {
     "header": "Papelera del Sistema",
@@ -841,5 +878,39 @@
     "system": "Atención & Control",
     "internalRole": "Operaciones",
     "clientRole": "Cliente"
+  },
+  "news": {
+    "header": "Novedades",
+    "justNow": "hace un momento",
+    "minutesAgo": "hace {{count}} min",
+    "hoursAgo": "hace {{count}} h",
+    "daysAgo": "hace {{count}} d",
+    "important": "Importante",
+    "more": "Más recientes",
+    "empty": "No hay novedades disponibles",
+    "category": {
+      "urgent": "Urgente",
+      "common": "Común"
+    },
+    "create": {
+      "header": "Nueva noticia",
+      "titleLabel": "Título",
+      "titlePlaceholder": "Escribe un título",
+      "contentLabel": "Contenido",
+      "contentPlaceholder": "Escribe el contenido de la noticia",
+      "categoryLabel": "Categoría",
+      "imageLabel": "Imagen (opcional)",
+      "pickImage": "Seleccionar imagen",
+      "submit": "Publicar",
+      "errorTitle": "Falta el título",
+      "errorContent": "Falta el contenido",
+      "imageErrorTitle": "Noticia creada",
+      "imageErrorBody": "La noticia se publicó, pero la imagen no se pudo subir.",
+      "submitErrorTitle": "Error",
+      "submitErrorBody": "No se pudo publicar la noticia. Intenta de nuevo."
+    }
+  },
+  "auth": {
+    "logout": "Cerrar sesión"
   }
 }
