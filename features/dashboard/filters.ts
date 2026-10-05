@@ -11,7 +11,7 @@ import {
   type SortField,
   type StatusGroupFilter,
 } from '@/lib/shipmentType';
-import { parseDateSafe } from '@/utils/dateFormatting';
+import { createLocalDate, parseDateSafe } from '@/utils/dateFormatting';
 
 export const DEFAULT_FILTERS: ShipmentFilters = {
   shipmentType: 'all',
@@ -280,8 +280,8 @@ export function getBoundaryDateTime(value: string | null | undefined, endOfDay =
     const m = Number(dateMatch[2]) - 1;
     const d = Number(dateMatch[3]);
     const boundary = endOfDay
-      ? new Date(y, m, d, 23, 59, 59, 999)
-      : new Date(y, m, d, 0, 0, 0, 0);
+      ? createLocalDate(y, m, d, 23, 59, 59, 999)
+      : createLocalDate(y, m, d, 0, 0, 0, 0);
     return boundary.getTime();
   }
 

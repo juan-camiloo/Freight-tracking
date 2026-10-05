@@ -619,7 +619,12 @@ const webDateInputStyle: CSSProperties = {
 
 const toWebDateValue = (value: string, mode: 'date' | 'datetime') => {
   if (!value) return '';
-  if (mode === 'date') return formatIsoToLocalDateInput(value);
+  if (mode === 'date') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    return formatIsoToLocalDateInput(value);
+  }
+  const dtMatch = value.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})(?::\d{2})?$/);
+  if (dtMatch) return `${dtMatch[1]}T${dtMatch[2]}`;
   return formatIsoToLocalDateTimeInput(value).replace(' ', 'T');
 };
 

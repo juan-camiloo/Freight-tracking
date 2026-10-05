@@ -5,6 +5,26 @@
  */
 
 /**
+ * Crea un objeto Date local garantizando que años entre 0 y 99 no se interpreten
+ * como 1900 + año (comportamiento heredado de JavaScript que rompe inputs al teclear dígitos individuales).
+ */
+export function createLocalDate(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hours = 0,
+  minutes = 0,
+  seconds = 0,
+  ms = 0
+): Date {
+  const date = new Date(year, monthIndex, day, hours, minutes, seconds, ms);
+  if (year < 100 && year >= 0) {
+    date.setFullYear(year);
+  }
+  return date;
+}
+
+/**
  * Parsea con seguridad cualquier cadena de fecha o fecha/hora hacia un objeto Date en zona horaria local.
  * Evita el comportamiento predeterminado de JS donde 'YYYY-MM-DD' se interpreta como medianoche UTC,
  * lo que en zonas horarias de América (como UTC-5 Colombia) provocaba que la fecha retrocediera 1 día (a las 19:00 de la víspera).
@@ -22,7 +42,7 @@ export function parseDateSafe(value: string | null | undefined): Date | null {
     const month = Number(dateOnlyMatch[2]) - 1;
     const day = Number(dateOnlyMatch[3]);
     // Fijar al mediodía local (12:00) para garantizar que jamás haya saltos de día por DST o conversiones
-    return new Date(year, month, day, 12, 0, 0);
+    return createLocalDate(year, month, day, 12, 0, 0);
   }
 
   // 2. Si es fecha y hora local sin información de zona (ej: "2026-09-17 14:30" o "2026-09-17T14:30")
@@ -34,7 +54,7 @@ export function parseDateSafe(value: string | null | undefined): Date | null {
     const hours = Number(localDateTimeMatch[4]);
     const minutes = Number(localDateTimeMatch[5]);
     const seconds = localDateTimeMatch[6] ? Number(localDateTimeMatch[6]) : 0;
-    return new Date(year, month, day, hours, minutes, seconds);
+    return createLocalDate(year, month, day, hours, minutes, seconds);
   }
 
   // 3. Cadena con zona horaria explícita (ej: ISO 8601 con Z o +/-HH:MM)
@@ -101,7 +121,7 @@ export function formatDateFull(value: string | null | undefined, locale = 'es-CO
  * Convierte un objeto Date a formato 'YYYY-MM-DD' en la zona horaria local.
  */
 export function formatDateInputValue(date: Date): string {
-  const year = date.getFullYear();
+  const year = String(date.getFullYear()).padStart(4, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
@@ -178,7 +198,7 @@ export function serializeDateTimeForDb(value: string | null | undefined): string
     const hours = Number(match[4]);
     const minutes = Number(match[5]);
     const seconds = match[6] ? Number(match[6]) : 0;
-    const localDate = new Date(year, month, day, hours, minutes, seconds);
+    const localDate = createLocalDate(year, month, day, hours, minutes, seconds);
     return Number.isNaN(localDate.getTime()) ? trimmed : localDate.toISOString();
   }
 
@@ -189,7 +209,7 @@ export function serializeDateTimeForDb(value: string | null | undefined): string
     const month = Number(dateMatch[2]) - 1;
     const day = Number(dateMatch[3]);
     // Inicio del día en zona local del usuario
-    const localDate = new Date(year, month, day, 0, 0, 0);
+    const localDate = createLocalDate(year, month, day, 0, 0, 0);
     return Number.isNaN(localDate.getTime()) ? trimmed : localDate.toISOString();
   }
 
